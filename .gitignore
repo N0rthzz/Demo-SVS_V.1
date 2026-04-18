@@ -3,3 +3,17 @@
 /index.html
 /stock_vision_app_dynamic.py
 /train_model.py
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+env/
+
+# Streamlit
+.streamlit/secrets.toml
+
+# OS
+.DS_Store
+Thumbs.db
