@@ -4,8 +4,6 @@ from ultralytics import YOLO
 import cv2
 import numpy as np
 from PIL import Image
-from streamlit_webrtc import webrtc_streamer, VideoTransformerBase, WebRtcMode
-import av
 import pandas as pd
 from datetime import datetime
 
@@ -24,19 +22,19 @@ CLASS_NAMES = [
 PRODUCT_CLASSES = [name for name in CLASS_NAMES if name != "Empty_Stock"]
 assert len(PRODUCT_CLASSES) == 11, "ต้องมีสินค้า 11 ชนิด"
 
-# ------------------- กำหนด Shelf Slot 11 ช่อง (จับคู่ index ให้ถูกต้อง) -------------------
+# ------------------- กำหนด Shelf Slot 11 ช่อง -------------------
 SLOT_RELATIVE_BOXES = [
-    {"id": "S01", "name": PRODUCT_CLASSES[0], "rel_bbox": [0.05, 0.10, 0.20, 0.35]},  # Canned tea
-    {"id": "S02", "name": PRODUCT_CLASSES[1], "rel_bbox": [0.22, 0.10, 0.37, 0.35]},  # Coconut Water Carton
-    {"id": "S03", "name": PRODUCT_CLASSES[2], "rel_bbox": [0.39, 0.10, 0.54, 0.35]},  # Coffee Can
-    {"id": "S04", "name": PRODUCT_CLASSES[3], "rel_bbox": [0.56, 0.10, 0.71, 0.35]},  # Drinking water
-    {"id": "S05", "name": PRODUCT_CLASSES[4], "rel_bbox": [0.73, 0.10, 0.88, 0.35]},  # Energy Drink (index4)
-    {"id": "S06", "name": PRODUCT_CLASSES[5], "rel_bbox": [0.05, 0.40, 0.20, 0.65]},  # Green Tea Bottle (index5)
-    {"id": "S07", "name": PRODUCT_CLASSES[6], "rel_bbox": [0.22, 0.40, 0.37, 0.65]},  # Juice Box (index6)
-    {"id": "S08", "name": PRODUCT_CLASSES[7], "rel_bbox": [0.39, 0.40, 0.54, 0.65]},  # Protein Drink (index7)
-    {"id": "S09", "name": PRODUCT_CLASSES[8], "rel_bbox": [0.56, 0.40, 0.71, 0.65]},  # Soda Can (index8)
-    {"id": "S10", "name": PRODUCT_CLASSES[9], "rel_bbox": [0.73, 0.40, 0.88, 0.65]},  # UHT milk carton (index9)
-    {"id": "S11", "name": PRODUCT_CLASSES[10], "rel_bbox": [0.05, 0.70, 0.20, 0.95]}, # Vitamin Drink (index10)
+    {"id": "S01", "name": PRODUCT_CLASSES[0], "rel_bbox": [0.05, 0.10, 0.20, 0.35]},
+    {"id": "S02", "name": PRODUCT_CLASSES[1], "rel_bbox": [0.22, 0.10, 0.37, 0.35]},
+    {"id": "S03", "name": PRODUCT_CLASSES[2], "rel_bbox": [0.39, 0.10, 0.54, 0.35]},
+    {"id": "S04", "name": PRODUCT_CLASSES[3], "rel_bbox": [0.56, 0.10, 0.71, 0.35]},
+    {"id": "S05", "name": PRODUCT_CLASSES[4], "rel_bbox": [0.73, 0.10, 0.88, 0.35]},
+    {"id": "S06", "name": PRODUCT_CLASSES[5], "rel_bbox": [0.05, 0.40, 0.20, 0.65]},
+    {"id": "S07", "name": PRODUCT_CLASSES[6], "rel_bbox": [0.22, 0.40, 0.37, 0.65]},
+    {"id": "S08", "name": PRODUCT_CLASSES[7], "rel_bbox": [0.39, 0.40, 0.54, 0.65]},
+    {"id": "S09", "name": PRODUCT_CLASSES[8], "rel_bbox": [0.56, 0.40, 0.71, 0.65]},
+    {"id": "S10", "name": PRODUCT_CLASSES[9], "rel_bbox": [0.73, 0.40, 0.88, 0.65]},
+    {"id": "S11", "name": PRODUCT_CLASSES[10], "rel_bbox": [0.05, 0.70, 0.20, 0.95]},
 ]
 
 def rel_to_abs(rel_bbox, img_w, img_h):
@@ -121,7 +119,7 @@ with st.sidebar:
     thickness = 1 if display_width <= 400 else 2
     hide_boxes = st.checkbox("ซ่อน Bounding Box (แสดงภาพต้นฉบับ)", value=False)
 
-mode = st.radio("โหมดการทำงาน", ["📸 อัปโหลดภาพ", "📷 ถ่ายภาพจากกล้อง", "🎥 Real‑time (Webcam)"])
+mode = st.radio("โหมดการทำงาน", ["📸 อัปโหลดภาพ", "📷 ถ่ายภาพจากกล้อง"])  # ตัด Real-time ออก
 
 if 'last_empty' not in st.session_state:
     st.session_state.last_empty = []
@@ -203,29 +201,6 @@ elif mode == "📷 ถ่ายภาพจากกล้อง":
             add_alerts(empty)
         else:
             st.success("ครบ")
-
-# ------------------- โหมด Real-time -------------------
-elif mode == "🎥 Real‑time (Webcam)":
-    st.info("เปิดกล้องเพื่อดูการตรวจจับแบบเรียลไทม์ (แจ้งเตือนอัตโนมัติไม่ทำงานใน live feed)")
-    class FixedLiveTransformer(VideoTransformerBase):
-        def __init__(self):
-            self.conf = confidence_threshold
-            self.display_w = display_width
-            self.hide = hide_boxes
-            self.thick = thickness
-        def recv(self, frame: av.VideoFrame) -> av.VideoFrame:
-            img = frame.to_ndarray(format="bgr24")
-            if self.hide:
-                img_resized = cv2.resize(img, (self.display_w, int(img.shape[0] * self.display_w / img.shape[1])))
-                return av.VideoFrame.from_ndarray(img_resized, format="bgr24")
-            else:
-                annotated_bgr, _, _ = analyze_shelf_image(img, self.conf, hide_boxes=False, thickness=self.thick)
-                h, w = annotated_bgr.shape[:2]
-                new_w = self.display_w
-                new_h = int(h * (new_w / w))
-                annotated_bgr = cv2.resize(annotated_bgr, (new_w, new_h))
-                return av.VideoFrame.from_ndarray(annotated_bgr, format="bgr24")
-    webrtc_streamer(key="fixed-live", mode=WebRtcMode.SENDRECV, video_transformer_factory=FixedLiveTransformer, async_processing=True)
 
 st.markdown("---")
 with st.expander("📄 รายงานการตรวจสอบ"):
