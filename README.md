@@ -1,0 +1,1 @@
+streamlit run stock_vision_app_fixed_final.py
