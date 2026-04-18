@@ -1,4 +1,4 @@
-# stock_vision_app_fixed_final.py
+# stock_vision_app_fixed_final.py (No WebRTC)
 import streamlit as st
 from ultralytics import YOLO
 import cv2
@@ -119,7 +119,7 @@ with st.sidebar:
     thickness = 1 if display_width <= 400 else 2
     hide_boxes = st.checkbox("ซ่อน Bounding Box (แสดงภาพต้นฉบับ)", value=False)
 
-mode = st.radio("โหมดการทำงาน", ["📸 อัปโหลดภาพ", "📷 ถ่ายภาพจากกล้อง"])  # ตัด Real-time ออก
+mode = st.radio("โหมดการทำงาน", ["📸 อัปโหลดภาพ", "📷 ถ่ายภาพจากกล้อง"])   # เอา Real-time ออก
 
 if 'last_empty' not in st.session_state:
     st.session_state.last_empty = []
@@ -202,6 +202,7 @@ elif mode == "📷 ถ่ายภาพจากกล้อง":
         else:
             st.success("ครบ")
 
+# ------------------- รายงาน -------------------
 st.markdown("---")
 with st.expander("📄 รายงานการตรวจสอบ"):
     if st.button("สร้างรายงาน"):
