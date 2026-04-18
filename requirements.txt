@@ -4,6 +4,3 @@ opencv-python-headless==4.10.0.84
 pillow==10.4.0
 numpy==1.26.4
 pandas==2.2.3
-streamlit-webrtc==0.47.0
-av==11.0.0
-aiortc==1.6.0
