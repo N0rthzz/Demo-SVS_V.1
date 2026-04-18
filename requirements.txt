@@ -1,0 +1,11 @@
+streamlit
+pandas
+plotly
+requests
+beautifulsoup4
+pypdf
+scikit-learn
+nltk
+spacy
+stackapi
+python-dotenv
