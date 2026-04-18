@@ -1,4 +1,4 @@
-# stock_vision_app_fixed_final.py (No WebRTC)
+# stock_vision_app_fixed_final.py (clean version)
 import streamlit as st
 from ultralytics import YOLO
 import cv2
@@ -6,6 +6,9 @@ import numpy as np
 from PIL import Image
 import pandas as pd
 from datetime import datetime
+
+# ------------------- ตั้งค่า page config เป็นคำสั่งแรกสุด -------------------
+st.set_page_config(page_title="Stock Vision System - Fixed Slot", layout="wide")
 
 # ------------------- โหลดโมเดล -------------------
 @st.cache_resource
@@ -105,8 +108,7 @@ def analyze_shelf_image(img_array, conf_threshold=0.25, hide_boxes=False, thickn
     
     return img_draw, slot_statuses, empty_slots
 
-# ------------------- Streamlit UI -------------------
-st.set_page_config(page_title="Stock Vision System - Fixed Slot", layout="wide")
+# ------------------- UI หลัก -------------------
 st.title("📦 Stock Vision System (Fixed Slot)")
 st.markdown("**สินค้า 11 ชนิด** | ตรวจจับโดยกำหนด Shelf Slot ล่วงหน้า")
 
@@ -119,7 +121,7 @@ with st.sidebar:
     thickness = 1 if display_width <= 400 else 2
     hide_boxes = st.checkbox("ซ่อน Bounding Box (แสดงภาพต้นฉบับ)", value=False)
 
-mode = st.radio("โหมดการทำงาน", ["📸 อัปโหลดภาพ", "📷 ถ่ายภาพจากกล้อง"])   # เอา Real-time ออก
+mode = st.radio("โหมดการทำงาน", ["📸 อัปโหลดภาพ", "📷 ถ่ายภาพจากกล้อง"])   # ไม่มี Real-time
 
 if 'last_empty' not in st.session_state:
     st.session_state.last_empty = []
