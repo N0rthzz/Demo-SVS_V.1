@@ -3,22 +3,23 @@ from ultralytics import YOLO
 import cv2
 import numpy as np
 from PIL import Image
+import os  # แก้ไข Error: name 'os' is not defined ที่นี่ครับ
 import uuid
 from datetime import datetime
 
-# ------------------- Setup -------------------
-st.set_page_config(page_title="Stock Vision - Camera Optimized", layout="wide")
+# ------------------- ตั้งค่าหน้าจอ -------------------
+st.set_page_config(page_title="Stock Vision - Smart Detection", layout="wide")
 
 @st.cache_resource
 def load_model():
-    # ใช้ Path ตามโครงสร้างโฟลเดอร์ของคุณ
+    # ตรวจสอบไฟล์ model ในโฟลเดอร์ปัจจุบัน
     if os.path.exists("best.pt"):
         return YOLO("best.pt")
     return None
 
 model = load_model()
 
-# รายชื่อสินค้าที่คุณระบุไว้ในระบบ
+# รายชื่อสินค้า 11 ชนิดตามโปรเจกต์ของคุณ
 PRODUCT_LIST = [
     {"id": "S01", "name": "Drinking water"}, {"id": "S02", "name": "Green Tea Bottle"},
     {"id": "S03", "name": "Energy Drink"}, {"id": "S04", "name": "Vitamin Drink"},
@@ -31,21 +32,22 @@ PRODUCT_LIST = [
 if 'image_history' not in st.session_state:
     st.session_state.image_history = []
 
-# ------------------- Logic -------------------
+# ------------------- ฟังก์ชันประมวลผล -------------------
 def process_image(img_input, conf_val):
     img = Image.open(img_input).convert("RGB")
     arr = np.array(img)
     found_items = set()
     
     if model:
-        # เพิ่มการทำ Pre-processing เล็กน้อยเพื่อช่วย AI
-        results = model(arr, conf=conf_val, iou=0.45) 
+        # AI สแกนหาชื่อสินค้าเบื้องหลัง
+        results = model(arr, conf=conf_val) 
         if results[0].boxes is not None:
             for box in results[0].boxes:
                 label = results[0].names[int(box.cls[0])]
                 if label != "Empty_Stock":
                     found_items.add(label)
     
+    # เก็บข้อมูลลงประวัติ
     st.session_state.image_history.append({
         "id": str(uuid.uuid4()),
         "image": img,
@@ -53,69 +55,79 @@ def process_image(img_input, conf_val):
         "time": datetime.now().strftime("%H:%M:%S")
     })
 
-# ------------------- UI -------------------
-st.title("📦 Stock Vision - Smart Detection")
-
+# ------------------- ส่วนควบคุม (Sidebar) -------------------
 with st.sidebar:
-    st.header("⚙️ ปรับจูน AI")
-    # ลองลดค่า Confidence ลงมาเหลือ 0.15 - 0.20 หากถ่ายในที่แสงน้อย
-    conf_threshold = st.slider("ความไวในการตรวจจับ (Confidence)", 0.0, 1.0, 0.20)
-    if st.button("🗑️ Clear History"):
+    st.header("⚙️ การตั้งค่า AI")
+    conf_threshold = st.slider("ความไว AI (Confidence)", 0.0, 1.0, 0.20)
+    if st.button("🗑️ ล้างประวัติทั้งหมด", use_container_width=True):
         st.session_state.image_history = []
         st.rerun()
 
-# ส่วนของกล้อง (Camera Input)
-cam_file = st.camera_input("📷 ถ่ายภาพเพื่อเช็คสต็อก")
-if cam_file:
-    # ตรวจสอบว่าเป็นภาพใหม่จริงๆ (ป้องกัน Loop)
-    cam_id = f"cam_{cam_file.size}"
-    if 'last_cam_id' not in st.session_state or st.session_state.last_cam_id != cam_id:
-        process_image(cam_file, conf_threshold)
-        st.session_state.last_cam_id = cam_id
+st.title("📦 Stock Vision - Smart Dashboard")
 
-# ------------------- Dashboard -------------------
+# ------------------- ส่วนรับภาพ -------------------
+mode = st.radio("เลือกแหล่งที่มา", ["📸 อัปโหลดภาพ", "📷 ถ่ายภาพจากกล้อง"], horizontal=True)
+if mode == "📸 อัปโหลดภาพ":
+    up_file = st.file_uploader("เพิ่มรูปภาพสินค้า", type=["jpg","png","jpeg"])
+    if up_file:
+        file_id = f"file_{up_file.name}_{up_file.size}"
+        if 'last_file_id' not in st.session_state or st.session_state.last_file_id != file_id:
+            process_image(up_file, conf_threshold)
+            st.session_state.last_file_id = file_id
+else:
+    cam_file = st.camera_input("ถ่ายภาพสินค้า")
+    if cam_file:
+        cam_id = f"cam_{cam_file.size}"
+        if 'last_cam_id' not in st.session_state or st.session_state.last_cam_id != cam_id:
+            process_image(cam_file, conf_threshold)
+            st.session_state.last_cam_id = cam_id
+
+# ------------------- Dashboard แสดงผลรวม -------------------
+# คำนวณสถานะสินค้าจากทุกภาพที่มีอยู่ในประวัติ
 all_detected = set()
 for entry in st.session_state.image_history:
     all_detected.update(entry["found"])
 
-st.subheader("📊 แผนผังชั้นวางปัจจุบัน")
-cols = st.columns(4)
+st.divider()
+st.subheader("📊 แผนผังสถานะชั้นวางรวม (Combined Status)")
+dash_cols = st.columns(4) # แสดงผลแบบ Grid
 for idx, p in enumerate(PRODUCT_LIST):
-    is_on_shelf = p["name"] in all_detected
-    with cols[idx % 4]:
-        bg = "#28a745" if is_on_shelf else "#dc3545"
+    is_active = p["name"] in all_detected
+    with dash_cols[idx % 4]:
+        bg_color = "#28a745" if is_active else "#dc3545" # เขียว=มี, แดง=หมด
         st.markdown(f"""
-            <div style="background-color:{bg}; color:white; padding:15px; border-radius:10px; text-align:center; margin-bottom:10px; height:100px;">
+            <div style="background-color:{bg_color}; color:white; padding:15px; border-radius:10px; text-align:center; margin-bottom:10px; min-height:100px;">
                 <small>{p['id']}</small><br>
-                <b>{p['name']}</b><br>
-                <small>{'✅ ตรวจพบ' if is_on_shelf else '❌ ของหมด'}</small>
+                <b style="font-size:16px;">{p['name']}</b><br>
+                <small>{'✅ มีสินค้า' if is_active else '❌ สินค้าหมด'}</small>
             </div>
         """, unsafe_allow_html=True)
 
-# ------------------- History & Correction -------------------
+# ------------------- ประวัติภาพและการแก้ไข (Manual Override) -------------------
 if st.session_state.image_history:
     st.divider()
-    st.subheader("🖼️ ประวัติการถ่ายภาพ")
+    st.subheader("🖼️ รายการภาพถ่ายและปุ่มแก้ไขมือ")
     for item in reversed(st.session_state.image_history):
-        with st.expander(f"ภาพเวลา {item['time']} - {'พบสินค้า' if item['found'] else 'ไม่พบสินค้า'}", expanded=True):
+        with st.expander(f"ภาพถ่ายเวลา {item['time']}", expanded=True):
             c1, c2 = st.columns([1, 1])
             with c1:
-                st.image(item["image"], use_container_width=True)
+                st.image(item["image"], use_container_width=True) # แสดงภาพ Clean
             with c2:
-                # แก้ปัญหา AI ตรวจไม่เจอ: ให้ผู้ใช้เลือกเองได้ถ้า AI พลาด
-                st.write("🤖 AI ตรวจพบ: " + (", ".join(item['found']) if item['found'] else "ไม่พบ"))
+                st.write("**🤖 AI ตรวจพบ:** " + (", ".join(item['found']) if item['found'] else "ไม่พบสินค้า"))
                 
-                new_selection = st.multiselect(
-                    "แก้ไข/เพิ่มรายการสินค้าที่เห็นในภาพ:",
+                # หาก AI ทายพลาด สามารถเลือกเพิ่ม/ลดสินค้าเองได้ที่นี่
+                edited_found = st.multiselect(
+                    "แก้ไขรายการสินค้าที่ปรากฏในภาพนี้:",
                     [p['name'] for p in PRODUCT_LIST],
                     default=item['found'],
                     key=f"edit_{item['id']}"
                 )
                 
-                if new_selection != item['found']:
-                    item['found'] = new_selection
-                    st.rerun() # อัปเดต Dashboard ทันที
+                # อัปเดตข้อมูลภาพหากมีการแก้ไขมือ
+                if edited_found != item['found']:
+                    item['found'] = edited_found
+                    st.rerun()
 
-                if st.button("🗑️ ลบภาพนี้", key=item['id']):
+                if st.button("🗑️ ลบภาพนี้", key=f"del_{item['id']}"):
                     st.session_state.image_history = [i for i in st.session_state.image_history if i['id'] != item['id']]
                     st.rerun()
