@@ -1,3 +1,4 @@
+# stock_vision_app_fixed_final.py (clean version)
 import streamlit as st
 from ultralytics import YOLO
 import cv2
@@ -6,170 +7,211 @@ from PIL import Image
 import pandas as pd
 from datetime import datetime
 
-# ------------------- 1. Page Config -------------------
+# ------------------- ตั้งค่า page config เป็นคำสั่งแรกสุด -------------------
 st.set_page_config(page_title="Stock Vision System - Fixed Slot", layout="wide")
 
-# ------------------- 2. Load Model -------------------
+# ------------------- โหลดโมเดล -------------------
 @st.cache_resource
 def load_model():
-    # ตรวจสอบว่ามีไฟล์ best.pt ในโฟลเดอร์เดียวกัน
-    try:
-        model = YOLO('best.pt')
-        return model
-    except:
-        return None
+    model = YOLO('best.pt')
+    return model
 
 model = load_model()
-
-# รายชื่อสินค้า 11 ชนิด (เรียงตามลำดับชั้นที่ต้องการ)
 CLASS_NAMES = [
-    "Drinking water", "Green Tea Bottle", "Energy Drink",       # ชั้น 1 (3)
-    "Vitamin Drink", "Protein Drink", "Soda Can",               # ชั้น 2 (3)
-    "Coffee Can", "Canned tea", "UHT milk carton",              # ชั้น 3 (3)
-    "Juice Box", "Coconut Water Carton"                         # ชั้น 4 (2)
+    "Canned tea", "Coconut Water Carton", "Coffee Can", "Drinking water",
+    "Empty_Stock", "Energy Drink", "Green Tea Bottle", "Juice Box",
+    "Protein Drink", "Soda Can", "UHT milk carton", "Vitamin Drink"
 ]
-# หมายเหตุ: ในโค้ดจริงต้องตรวจเช็คคลาส 'Empty_Stock' ด้วยหากโมเดลเทรนมาแบบนั้น
-# ในที่นี้จะเน้นไปที่การ mapping 11 slot หลัก
+PRODUCT_CLASSES = [name for name in CLASS_NAMES if name != "Empty_Stock"]
+assert len(PRODUCT_CLASSES) == 11, "ต้องมีสินค้า 11 ชนิด"
 
-# ------------------- 3. Database / Slot Setup -------------------
-# กำหนดพิกัดจำลอง (relative) สำหรับการตรวจจับจริง
-SLOT_CONFIG = []
-for i, name in enumerate(CLASS_NAMES):
-    slot_id = f"S{i+1:02d}"
-    # คำนวณตำแหน่งจำลองใน Grid
-    SLOT_CONFIG.append({
-        "id": slot_id,
-        "name": name,
-        "rel_bbox": [0.1, 0.1, 0.2, 0.2] # ตัวอย่างพิกัด (ต้องปรับตามหน้าตู้จริง)
-    })
+# ------------------- กำหนด Shelf Slot 11 ช่อง -------------------
+SLOT_RELATIVE_BOXES = [
+    {"id": "S01", "name": PRODUCT_CLASSES[0], "rel_bbox": [0.05, 0.10, 0.20, 0.35]},
+    {"id": "S02", "name": PRODUCT_CLASSES[1], "rel_bbox": [0.22, 0.10, 0.37, 0.35]},
+    {"id": "S03", "name": PRODUCT_CLASSES[2], "rel_bbox": [0.39, 0.10, 0.54, 0.35]},
+    {"id": "S04", "name": PRODUCT_CLASSES[3], "rel_bbox": [0.56, 0.10, 0.71, 0.35]},
+    {"id": "S05", "name": PRODUCT_CLASSES[4], "rel_bbox": [0.73, 0.10, 0.88, 0.35]},
+    {"id": "S06", "name": PRODUCT_CLASSES[5], "rel_bbox": [0.05, 0.40, 0.20, 0.65]},
+    {"id": "S07", "name": PRODUCT_CLASSES[6], "rel_bbox": [0.22, 0.40, 0.37, 0.65]},
+    {"id": "S08", "name": PRODUCT_CLASSES[7], "rel_bbox": [0.39, 0.40, 0.54, 0.65]},
+    {"id": "S09", "name": PRODUCT_CLASSES[8], "rel_bbox": [0.56, 0.40, 0.71, 0.65]},
+    {"id": "S10", "name": PRODUCT_CLASSES[9], "rel_bbox": [0.73, 0.40, 0.88, 0.65]},
+    {"id": "S11", "name": PRODUCT_CLASSES[10], "rel_bbox": [0.05, 0.70, 0.20, 0.95]},
+]
 
-# ------------------- 4. Helper Functions -------------------
-def analyze_shelf_image(img_array, conf_threshold=0.25):
-    if model is None:
-        return img_array, [], []
-    
+def rel_to_abs(rel_bbox, img_w, img_h):
+    x1 = int(rel_bbox[0] * img_w)
+    y1 = int(rel_bbox[1] * img_h)
+    x2 = int(rel_bbox[2] * img_w)
+    y2 = int(rel_bbox[3] * img_h)
+    return [x1, y1, x2, y2]
+
+def check_slot_occupancy(detection_boxes, slot_abs_bbox, iou_thresh=0.05):
+    sx1, sy1, sx2, sy2 = slot_abs_bbox
+    slot_area = (sx2 - sx1) * (sy2 - sy1)
+    if slot_area <= 0:
+        return False
+    for (dx1, dy1, dx2, dy2) in detection_boxes:
+        ix1 = max(sx1, dx1)
+        iy1 = max(sy1, dy1)
+        ix2 = min(sx2, dx2)
+        iy2 = min(sy2, dy2)
+        if ix2 > ix1 and iy2 > iy1:
+            inter_area = (ix2 - ix1) * (iy2 - iy1)
+            iou = inter_area / slot_area
+            if iou > iou_thresh:
+                return True
+    return False
+
+def analyze_shelf_image(img_array, conf_threshold=0.25, hide_boxes=False, thickness=2):
     results = model(img_array, conf=conf_threshold)
-    # ... (ส่วนการคำนวณ IoU เหมือนโค้ดเดิมของคุณ)
-    # ในตัวอย่างนี้จะส่งค่าจำลองกลับไปเพื่อให้เห็น Logic การทำงาน
-    return img_array, [], []
-
-# ------------------- 5. Sidebar & Navigation -------------------
-with st.sidebar:
-    st.title("⚙️ Control Panel")
-    mode = st.radio("เลือกโหมดการทำงาน", 
-                    ["🖥️ จำลองตู้แช่ (Simulation)", 
-                     "📸 อัปโหลดภาพตรวจจับจริง", 
-                     "📷 ถ่ายภาพจากกล้อง"])
+    h, w = img_array.shape[:2]
     
-    st.divider()
-    confidence_threshold = st.slider("Confidence threshold", 0.0, 1.0, 0.25)
-    if st.button("🔄 Reset ระบบทั้งหมด"):
-        for key in st.session_state.keys():
-            del st.session_state[key]
-        st.rerun()
+    product_boxes = []
+    if results[0].boxes is not None:
+        for box in results[0].boxes:
+            cls_id = int(box.cls[0])
+            class_name = CLASS_NAMES[cls_id]
+            if class_name != "Empty_Stock":
+                x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
+                product_boxes.append([x1, y1, x2, y2])
+    
+    slot_statuses = []
+    empty_slots = []
+    img_draw = img_array.copy()
+    if len(img_draw.shape) == 3 and img_draw.shape[2] == 3:
+        img_draw = cv2.cvtColor(img_draw, cv2.COLOR_RGB2BGR)
+    
+    for slot in SLOT_RELATIVE_BOXES:
+        abs_bbox = rel_to_abs(slot["rel_bbox"], w, h)
+        occupied = check_slot_occupancy(product_boxes, abs_bbox, iou_thresh=0.05)
+        status = occupied
+        slot_statuses.append({
+            "id": slot["id"],
+            "name": slot["name"],
+            "status": status,
+            "bbox": abs_bbox
+        })
+        if not status:
+            empty_slots.append(slot["name"])
+        
+        if not hide_boxes:
+            color = (0, 255, 0) if status else (0, 0, 255)
+            cv2.rectangle(img_draw, (abs_bbox[0], abs_bbox[1]), (abs_bbox[2], abs_bbox[3]), color, thickness)
+            label = f"{slot['id']}: {'In-stock' if status else 'Out-of-stock'}"
+            text_x = abs_bbox[0]
+            text_y = abs_bbox[3] + 15
+            if text_y + 10 > h:
+                text_y = abs_bbox[1] - 5
+            cv2.putText(img_draw, label, (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 1)
+    
+    return img_draw, slot_statuses, empty_slots
 
-# ------------------- 6. Session State Initial -------------------
-if 'shelf_state' not in st.session_state:
-    # เริ่มต้น: ทุกช่องว่าง (False = สีแดง)
-    st.session_state.shelf_state = {slot['id']: False for slot in SLOT_CONFIG}
+# ------------------- UI หลัก -------------------
+st.title("📦 Stock Vision System (Fixed Slot)")
+st.markdown("**สินค้า 11 ชนิด** | ตรวจจับโดยกำหนด Shelf Slot ล่วงหน้า")
+
+with st.sidebar:
+    st.header("⚙️ การตั้งค่า")
+    confidence_threshold = st.slider("Confidence threshold", 0.0, 1.0, 0.25, 0.01)
+    display_size = st.selectbox("ขนาดภาพ", ["เล็ก (400px)", "กลาง (600px)", "ใหญ่ (800px)"])
+    width_map = {"เล็ก (400px)": 400, "กลาง (600px)": 600, "ใหญ่ (800px)": 800}
+    display_width = width_map[display_size]
+    thickness = 1 if display_width <= 400 else 2
+    hide_boxes = st.checkbox("ซ่อน Bounding Box (แสดงภาพต้นฉบับ)", value=False)
+
+mode = st.radio("โหมดการทำงาน", ["📸 อัปโหลดภาพ", "📷 ถ่ายภาพจากกล้อง"])   # ไม่มี Real-time
+
+if 'last_empty' not in st.session_state:
+    st.session_state.last_empty = []
 if 'alert_history' not in st.session_state:
     st.session_state.alert_history = []
 
-# ------------------- 7. UI: Simulation Mode -------------------
-if mode == "🖥️ จำลองตู้แช่ (Simulation)":
-    st.title("🧊 Smart Fridge Simulation (3-3-3-2)")
-    st.write("โหมดจำลองพฤติกรรมตู้แช่: คลิกปุ่มเพื่อเติมหรือนำสินค้าออก")
+def add_alerts(empty_slots):
+    if set(empty_slots) != set(st.session_state.last_empty):
+        new_empty = set(empty_slots) - set(st.session_state.last_empty)
+        for slot_name in new_empty:
+            msg = f"⚠️ สินค้าหมด: {slot_name}"
+            st.session_state.alert_history.insert(0, {"time": datetime.now().strftime("%H:%M:%S"), "message": msg})
+            st.toast(msg, icon="🔴")
+        st.session_state.last_empty = empty_slots.copy()
+        if len(st.session_state.alert_history) > 20:
+            st.session_state.alert_history.pop()
 
-    # จัดกลุ่ม Slot เป็นชั้น (3, 3, 3, 2)
-    rows = [SLOT_CONFIG[0:3], SLOT_CONFIG[3:6], SLOT_CONFIG[6:9], SLOT_CONFIG[9:11]]
-    
-    # --- ส่วนแสดงผลกราฟิกตู้แช่ ---
-    st.subheader("📊 หน้าจอสถานะปัจจุบัน")
-    for row_slots in rows:
-        cols = st.columns(len(row_slots))
-        for i, slot in enumerate(row_slots):
-            is_active = st.session_state.shelf_state[slot['id']]
-            bg_color = "#d4edda" if is_active else "#f8d7da"  # เขียว/แดง
-            text_color = "#155724" if is_active else "#721c24"
-            status_text = "✅ มีสินค้า" if is_active else "❌ สินค้าหมด"
-            
-            with cols[i]:
-                st.markdown(f"""
-                    <div style="background-color:{bg_color}; border:2px solid {text_color}; 
-                                padding:20px; border-radius:15px; text-align:center; margin-bottom:10px;">
-                        <small style="color:#666;">{slot['id']}</small><br>
-                        <b style="font-size:1.1rem; color:{text_color};">{slot['name']}</b><br>
-                        <hr style="border:0.5px solid {text_color}; opacity:0.2;">
-                        <span style="font-weight:bold; color:{text_color};">{status_text}</span>
-                    </div>
-                """, unsafe_allow_html=True)
+def show_dashboard(slot_statuses):
+    total = len(slot_statuses)
+    occupied = sum(1 for s in slot_statuses if s["status"])
+    empty = total - occupied
+    c1, c2, c3 = st.columns(3)
+    c1.metric("ช่องทั้งหมด", total)
+    c2.metric("✅ มีสินค้า", occupied)
+    c3.metric("❌ สินค้าหมด", empty)
+    st.subheader("แผนผังชั้นวาง (รหัสสี)")
+    cols = st.columns(4)
+    for idx, s in enumerate(slot_statuses):
+        with cols[idx % 4]:
+            color = "#d4edda" if s["status"] else "#f8d7da"
+            st.markdown(f"""
+            <div style="background-color:{color}; padding:10px; border-radius:10px; margin:5px; text-align:center;">
+                <b>{s['id']}</b><br>{s['name']}<br>
+                <span style="color:{'green' if s['status'] else 'red'}">● {'มีสินค้า' if s['status'] else 'หมด'}</span>
+            </div>
+            """, unsafe_allow_html=True)
+    st.subheader("🔔 ประวัติแจ้งเตือน")
+    if st.session_state.alert_history:
+        st.dataframe(pd.DataFrame(st.session_state.alert_history), use_container_width=True)
+    else:
+        st.info("ไม่มีการแจ้งเตือน")
 
-    st.divider()
-
-    # --- ส่วนปุ่มกดควบคุม ---
-    st.subheader("🕹️ แผงควบคุม (Stock Management)")
-    col_add, col_rem = st.columns(2)
-    
-    with col_add:
-        st.success("➕ เติมสินค้า")
-        for slot in SLOT_CONFIG:
-            if not st.session_state.shelf_state[slot['id']]:
-                if st.button(f"เติม {slot['name']}", key=f"in_{slot['id']}", use_container_width=True):
-                    st.session_state.shelf_state[slot['id']] = True
-                    st.toast(f"เติม {slot['name']} แล้ว", icon="🟢")
-                    st.rerun()
-
-    with col_rem:
-        st.error("➖ นำสินค้าออก")
-        for slot in SLOT_CONFIG:
-            if st.session_state.shelf_state[slot['id']]:
-                if st.button(f"หยิบ {slot['name']}", key=f"out_{slot['id']}", use_container_width=True):
-                    st.session_state.shelf_state[slot['id']] = False
-                    st.session_state.alert_history.insert(0, {
-                        "time": datetime.now().strftime("%H:%M:%S"),
-                        "item": slot['name'],
-                        "event": "Out of Stock"
-                    })
-                    st.toast(f"{slot['name']} หมดแล้ว!", icon="🔴")
-                    st.rerun()
-
-    # --- ส่วนสรุปรายการที่ขาด ---
-    missing = [s['name'] for s in SLOT_CONFIG if not st.session_state.shelf_state[s['id']]]
-    if missing:
-        st.warning(f"🔔 **แจ้งเตือน:** สินค้าที่ขาดขณะนี้คือ: {', '.join(missing)}")
-    
-    with st.expander("📄 ประวัติการแจ้งเตือน"):
-        if st.session_state.alert_history:
-            st.table(st.session_state.alert_history)
+# ------------------- โหมดอัปโหลด -------------------
+if mode == "📸 อัปโหลดภาพ":
+    up = st.file_uploader("เลือกภาพชั้นวาง", type=["jpg","jpeg","png"])
+    if up:
+        img = Image.open(up).convert("RGB")
+        arr = np.array(img)
+        if hide_boxes:
+            _, statuses, empty = analyze_shelf_image(arr, confidence_threshold, hide_boxes=True, thickness=thickness)
+            st.image(arr, caption="ภาพต้นฉบับ (ไม่มีกรอบ)", width=display_width)
         else:
-            st.write("ยังไม่มีบันทึก")
-
-# ------------------- 8. UI: Detection Mode (Upload/Camera) -------------------
-elif mode in ["📸 อัปโหลดภาพตรวจจับจริง", "📷 ถ่ายภาพจากกล้อง"]:
-    st.title("🔍 Real-time Detection Mode")
-    
-    source = st.file_uploader("อัปโหลดรูปภาพ", type=['jpg','png','jpeg']) if mode == "📸 อัปโหลดภาพตรวจจับจริง" else st.camera_input("ถ่ายภาพ")
-
-    if source:
-        img = Image.open(source).convert("RGB")
-        img_array = np.array(img)
-        
-        # รันโมเดลจริง (ใช้ Function analyze_shelf_image ที่คุณเขียนไว้ในไฟล์เดิม)
-        # ในที่นี้ผมจะแสดงภาพและ Dashboard สรุป
-        st.image(img, caption="ภาพที่กำลังวิเคราะห์...", use_column_width=True)
-        
-        if model is None:
-            st.error("ไม่พบไฟล์ best.pt กรุณาตรวจสอบตำแหน่งไฟล์")
+            annotated_bgr, statuses, empty = analyze_shelf_image(arr, confidence_threshold, hide_boxes=False, thickness=thickness)
+            annotated_rgb = cv2.cvtColor(annotated_bgr, cv2.COLOR_BGR2RGB)
+            st.image(annotated_rgb, caption="ผลลัพธ์ (Bounding Box ช่อง)", width=display_width)
+        show_dashboard(statuses)
+        if empty:
+            st.warning(f"พบช่องว่าง {len(empty)} ช่อง: {', '.join(empty)}")
+            add_alerts(empty)
         else:
-            with st.spinner("กำลังวิเคราะห์สินค้า..."):
-                # Logic การตรวจจับ (คุณสามารถเอาฟังก์ชัน analyze_shelf_image ของเดิมมาใส่ตรงนี้)
-                st.success("วิเคราะห์เสร็จสิ้น (ตัวอย่างผลลัพธ์)")
-                # จำลองการแสดงผล Dashboard
-                c1, c2, c3 = st.columns(3)
-                c1.metric("สินค้าทั้งหมด", "11")
-                c2.metric("สถานะปกติ", "8", delta="OK")
-                c3.metric("สินค้าหมด", "3", delta="-3", delta_color="inverse")
+            st.success("สินค้าครบทุกช่อง")
 
-# ------------------- Footer -------------------
-st.sidebar.markdown("---")
-st.sidebar.caption(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+# ------------------- โหมดถ่ายภาพ -------------------
+elif mode == "📷 ถ่ายภาพจากกล้อง":
+    captured = st.camera_input("ถ่ายภาพ")
+    if captured:
+        img = Image.open(captured).convert("RGB")
+        arr = np.array(img)
+        if hide_boxes:
+            _, statuses, empty = analyze_shelf_image(arr, confidence_threshold, hide_boxes=True, thickness=thickness)
+            st.image(arr, caption="ภาพต้นฉบับ", width=display_width)
+        else:
+            annotated_bgr, statuses, empty = analyze_shelf_image(arr, confidence_threshold, hide_boxes=False, thickness=thickness)
+            annotated_rgb = cv2.cvtColor(annotated_bgr, cv2.COLOR_BGR2RGB)
+            st.image(annotated_rgb, caption="ผลการตรวจจับ", width=display_width)
+        show_dashboard(statuses)
+        if empty:
+            st.warning(f"ช่องว่าง: {', '.join(empty)}")
+            add_alerts(empty)
+        else:
+            st.success("ครบ")
+
+# ------------------- รายงาน -------------------
+# st.markdown("---")
+# with st.expander("📄 รายงานการตรวจสอบ"):
+#     if st.button("สร้างรายงาน"):
+#         if st.session_state.alert_history:
+#             df = pd.DataFrame(st.session_state.alert_history)
+#             st.dataframe(df)
+#             st.write("**สรุปสินค้าที่ขาดบ่อย**")
+#             st.bar_chart(df['message'].value_counts())
+#         else:
+#             st.info("ไม่มีประวัติ")
