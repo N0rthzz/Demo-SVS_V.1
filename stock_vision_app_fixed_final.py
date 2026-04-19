@@ -205,13 +205,13 @@ elif mode == "📷 ถ่ายภาพจากกล้อง":
             st.success("ครบ")
 
 # ------------------- รายงาน -------------------
-st.markdown("---")
-with st.expander("📄 รายงานการตรวจสอบ"):
-    if st.button("สร้างรายงาน"):
-        if st.session_state.alert_history:
-            df = pd.DataFrame(st.session_state.alert_history)
-            st.dataframe(df)
-            st.write("**สรุปสินค้าที่ขาดบ่อย**")
-            st.bar_chart(df['message'].value_counts())
-        else:
-            st.info("ไม่มีประวัติ")
+# st.markdown("---")
+# with st.expander("📄 รายงานการตรวจสอบ"):
+#     if st.button("สร้างรายงาน"):
+#         if st.session_state.alert_history:
+#             df = pd.DataFrame(st.session_state.alert_history)
+#             st.dataframe(df)
+#             st.write("**สรุปสินค้าที่ขาดบ่อย**")
+#             st.bar_chart(df['message'].value_counts())
+#         else:
+#             st.info("ไม่มีประวัติ")
