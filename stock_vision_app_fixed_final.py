@@ -13,12 +13,21 @@ st.set_page_config(page_title="Stock Vision System - Fixed Slot", layout="wide")
 # ------------------- โหลดโมเดล -------------------
 @st.cache_resource
 def load_model():
-    # ใช้ Path แบบระบุตำแหน่งไฟล์ให้ชัดเจน
     import os
-    base_path = os.path.dirname(os.path.abspath(__file__))
-    model_path = os.path.join(base_path, "best.pt")
-    model = YOLO(model_path)
-    return model
+    # หาตำแหน่งที่ไฟล์โค้ดนี้ตั้งอยู่จริงๆ
+    current_path = os.path.dirname(os.path.abspath(__file__))
+    model_path = os.path.join(current_path, 'best.pt')
+    
+    if not os.path.exists(model_path):
+        st.error(f"❌ หาไฟล์โมเดลไม่เจอที่: {model_path}")
+        return None
+    
+    try:
+        model = YOLO(model_path)
+        return model
+    except Exception as e:
+        st.error(f"❌ โหลดโมเดลไม่ได้: {e}")
+        return None
 
 model = load_model()
 CLASS_NAMES = [
