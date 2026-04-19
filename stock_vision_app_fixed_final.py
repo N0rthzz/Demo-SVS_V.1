@@ -44,19 +44,23 @@ NAME_MAPPING = {
 
 # ------------------- กำหนด Shelf Slot 11 ช่อง (ปรับพิกัดให้แม่นยำขึ้น) -------------------
 SLOT_RELATIVE_BOXES = [
-    {"id": "S01", "name": "Canned tea", "rel_bbox": [0.03, 0.05, 0.20, 0.30]},
-    {"id": "S02", "name": "Coconut Water Carton", "rel_bbox": [0.22, 0.05, 0.39, 0.30]},
-    {"id": "S03", "name": "Coffee Can", "rel_bbox": [0.41, 0.05, 0.58, 0.30]},
-    {"id": "S04", "name": "Drinking water", "rel_bbox": [0.60, 0.05, 0.77, 0.30]},
-    {"id": "S05", "name": "Energy Drink", "rel_bbox": [0.79, 0.05, 0.96, 0.30]},
-    {"id": "S06", "name": "Green Tea Bottle", "rel_bbox": [0.03, 0.33, 0.20, 0.58]},
-    {"id": "S07", "name": "Juice Box", "rel_bbox": [0.22, 0.33, 0.39, 0.58]},
-    {"id": "S08", "name": "Protein Drink", "rel_bbox": [0.41, 0.33, 0.58, 0.58]},
-    {"id": "S09", "name": "Soda Can", "rel_bbox": [0.60, 0.33, 0.77, 0.58]},
-    {"id": "S10", "name": "UHT milk carton", "rel_bbox": [0.79, 0.33, 0.96, 0.58]},
-    {"id": "S11", "name": "Vitamin Drink", "rel_bbox": [0.03, 0.62, 0.30, 0.87]},
+    # แถวที่ 1 (4 ช่อง)
+    {"id": "S01", "name": "Canned tea", "rel_bbox": [0.02, 0.02, 0.23, 0.28]},
+    {"id": "S02", "name": "Coconut Water Carton", "rel_bbox": [0.25, 0.02, 0.46, 0.28]},
+    {"id": "S03", "name": "Coffee Can", "rel_bbox": [0.48, 0.02, 0.69, 0.28]},
+    {"id": "S04", "name": "Drinking water", "rel_bbox": [0.71, 0.02, 0.92, 0.28]},
+    
+    # แถวที่ 2 (4 ช่อง)
+    {"id": "S05", "name": "Energy Drink", "rel_bbox": [0.02, 0.31, 0.23, 0.57]},
+    {"id": "S06", "name": "Green Tea Bottle", "rel_bbox": [0.25, 0.31, 0.46, 0.57]},
+    {"id": "S07", "name": "Juice Box", "rel_bbox": [0.48, 0.31, 0.69, 0.57]},
+    {"id": "S08", "name": "Protein Drink", "rel_bbox": [0.71, 0.31, 0.92, 0.57]},
+    
+    # แถวที่ 3 (3 ช่อง)
+    {"id": "S09", "name": "Soda Can", "rel_bbox": [0.02, 0.60, 0.30, 0.86]},
+    {"id": "S10", "name": "UHT milk carton", "rel_bbox": [0.35, 0.60, 0.63, 0.86]},
+    {"id": "S11", "name": "Vitamin Drink", "rel_bbox": [0.68, 0.60, 0.96, 0.86]},
 ]
-
 # เพิ่ม Slot S12 สำหรับแถวที่ 4 (ตามภาพ)
 SLOT_RELATIVE_BOXES.append({"id": "S12", "name": "Empty Slot", "rel_bbox": [0.35, 0.62, 0.62, 0.87]})
 
@@ -195,6 +199,16 @@ def analyze_shelf_image_advanced(img_array, conf_threshold=0.25):
     # ตรวจจับแบบ Ensemble
     detection_boxes = detect_with_ensemble(img_array, conf_threshold)
     
+    # ✅ เพิ่มส่วนแสดงผล bounding box บนภาพ (สำหรับ debug)
+    img_debug = img_array.copy()
+    for det in detection_boxes:
+        x1, y1, x2, y2, class_name = det
+        cv2.rectangle(img_debug, (x1, y1), (x2, y2), (255, 0, 0), 2)
+        cv2.putText(img_debug, class_name, (x1, y1-5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,0,0), 2)
+
+    # แสดงภาพ debug ใน sidebar
+    st.sidebar.image(img_debug, caption="Bounding Box ที่ตรวจจับได้", use_container_width=True)
+
     # แสดง log การตรวจจับ
     detected_classes = list(set([det[4] for det in detection_boxes]))
     if detected_classes:
