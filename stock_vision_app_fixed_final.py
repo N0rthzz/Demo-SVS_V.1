@@ -10,6 +10,7 @@ import os
 import json
 import time
 import base64
+import random
 
 # ------------------- ตั้งค่า page config -------------------
 st.set_page_config(page_title="🥤 Smart Vending Stock Monitor Pro", layout="wide")
@@ -27,6 +28,21 @@ CLASS_NAMES = [
     "Empty_Stock", "Energy Drink", "Green Tea Bottle", "Juice Box",
     "Protein Drink", "Soda Can", "UHT milk carton", "Vitamin Drink"
 ]
+
+# สร้าง映射ชื่อสินค้าไทย-อังกฤษ
+THAI_NAMES = {
+    "Canned tea": "ชากระป๋อง",
+    "Coconut Water Carton": "น้ำมะพร้าวกล่อง",
+    "Coffee Can": "กาแฟกระป๋อง",
+    "Drinking water": "น้ำดื่ม",
+    "Energy Drink": "เครื่องดื่มชูกำลัง",
+    "Green Tea Bottle": "ชาเขียวขวด",
+    "Juice Box": "น้ำผลไม้กล่อง",
+    "Protein Drink": "เครื่องดื่มโปรตีน",
+    "Soda Can": "โซดากระป๋อง",
+    "UHT milk carton": "นม UHT กล่อง",
+    "Vitamin Drink": "เครื่องดื่มวิตามิน"
+}
 
 # ------------------- กำหนด Shelf Slot 11 ช่อง -------------------
 SLOT_RELATIVE_BOXES = [
@@ -46,7 +62,143 @@ SLOT_RELATIVE_BOXES = [
 # ไฟล์สำหรับเก็บประวัติ
 HISTORY_FILE = "stock_history.json"
 UPLOAD_HISTORY_FILE = "upload_history.json"
+VALIDATION_HISTORY_FILE = "validation_history.json"
 
+# ==================== ฟังก์ชันสำหรับทดสอบความแม่นยำ ====================
+def predict_single_product(img_array, conf_threshold=0.25):
+    """ทำนายสินค้าจากภาพเดียว พร้อมแสดงผลทั้งหมด"""
+    results = model(img_array, conf=conf_threshold)
+    
+    predictions = []
+    if results[0].boxes is not None:
+        for box in results[0].boxes:
+            cls_id = int(box.cls[0])
+            class_name = CLASS_NAMES[cls_id]
+            confidence = float(box.conf[0])
+            x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
+            
+            if class_name != "Empty_Stock":
+                predictions.append({
+                    "class_name": class_name,
+                    "thai_name": THAI_NAMES.get(class_name, class_name),
+                    "confidence": confidence,
+                    "bbox": [x1, y1, x2, y2]
+                })
+    
+    # เรียงตามความมั่นใจ
+    predictions.sort(key=lambda x: x["confidence"], reverse=True)
+    return predictions
+
+def draw_prediction_on_image(img_array, predictions):
+    """วาดกรอบและข้อความทำนายบนภาพ"""
+    img_draw = img_array.copy()
+    h, w = img_draw.shape[:2]
+    
+    colors = [(0, 255, 0), (255, 165, 0), (0, 255, 255), (255, 0, 255), (0, 165, 255)]
+    
+    for i, pred in enumerate(predictions):
+        x1, y1, x2, y2 = pred["bbox"]
+        color = colors[i % len(colors)]
+        
+        # วาดกรอบ
+        cv2.rectangle(img_draw, (x1, y1), (x2, y2), color, 3)
+        
+        # ข้อความ
+        label = f"{pred['thai_name']} ({pred['confidence']:.1%})"
+        
+        # พื้นหลังข้อความ
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        font_scale = 0.6
+        (text_w, text_h), _ = cv2.getTextSize(label, font, font_scale, 2)
+        
+        bg_x1 = x1
+        bg_y1 = max(0, y1 - text_h - 10)
+        bg_x2 = min(x1 + text_w + 10, w)
+        bg_y2 = y1
+        
+        cv2.rectangle(img_draw, (bg_x1, bg_y1), (bg_x2, bg_y2), color, -1)
+        cv2.putText(img_draw, label, (x1 + 5, y1 - 5), font, font_scale, (255, 255, 255), 2)
+    
+    return img_draw
+
+def save_validation_result(image_array, filename, predictions, actual_label=None):
+    """บันทึกผลการทดสอบความแม่นยำ"""
+    history = []
+    if os.path.exists(VALIDATION_HISTORY_FILE):
+        try:
+            with open(VALIDATION_HISTORY_FILE, "r", encoding="utf-8") as f:
+                history = json.load(f)
+        except:
+            history = []
+    
+    # แปลงภาพเป็น base64
+    _, buffer = cv2.imencode('.jpg', cv2.cvtColor(image_array, cv2.COLOR_RGB2BGR))
+    image_base64 = base64.b64encode(buffer).decode('utf-8')
+    
+    # เตรียมข้อมูล
+    top_prediction = predictions[0] if predictions else None
+    
+    history.insert(0, {
+        "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "filename": str(filename),
+        "image_base64": str(image_base64),
+        "predictions": [
+            {
+                "class": p["class_name"],
+                "thai_name": p["thai_name"],
+                "confidence": p["confidence"]
+            } for p in predictions[:3]
+        ],
+        "top_prediction": top_prediction["class_name"] if top_prediction else None,
+        "top_confidence": top_prediction["confidence"] if top_prediction else 0,
+        "actual_label": actual_label
+    })
+    
+    # เก็บแค่ 20 รายการล่าสุด
+    history = history[:20]
+    
+    try:
+        with open(VALIDATION_HISTORY_FILE, "w", encoding="utf-8") as f:
+            json.dump(history, f, indent=2, ensure_ascii=False, default=str)
+    except Exception as e:
+        pass
+
+def load_validation_history():
+    """โหลดประวัติการทดสอบ"""
+    if os.path.exists(VALIDATION_HISTORY_FILE):
+        try:
+            with open(VALIDATION_HISTORY_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except:
+            return []
+    return []
+
+def calculate_model_accuracy():
+    """คำนวณความแม่นยำของโมเดลจากประวัติ"""
+    history = load_validation_history()
+    if not history:
+        return None
+    
+    total = 0
+    correct = 0
+    
+    for record in history:
+        if record.get("actual_label") and record.get("top_prediction"):
+            total += 1
+            if record["actual_label"] == record["top_prediction"]:
+                correct += 1
+    
+    if total == 0:
+        return None
+    
+    return {
+        "accuracy": correct / total,
+        "total_tests": total,
+        "correct": correct,
+        "wrong": total - correct
+    }
+
+# ==================== ฟังก์ชันหลัก (เดิม) ====================
 def rel_to_abs(rel_bbox, img_w, img_h):
     x1 = int(rel_bbox[0] * img_w)
     y1 = int(rel_bbox[1] * img_h)
@@ -110,14 +262,13 @@ def detect_with_ensemble(img_array, conf_threshold=0.25):
     return [det[:5] for det in all_detections]
 
 def analyze_by_brightness(img_array, slot_abs_bbox):
-    """วิเคราะห์ความสว่างของช่อง (Fallback)"""
     x1, y1, x2, y2 = slot_abs_bbox
     roi = img_array[y1:y2, x1:x2]
     if roi.size == 0:
         return False
     gray = cv2.cvtColor(roi, cv2.COLOR_RGB2GRAY)
     brightness = np.mean(gray)
-    return brightness < 130  # ถ้ามืดแสดงว่ามีสินค้า
+    return brightness < 130
 
 def check_slot_occupancy_advanced(detection_boxes, slot_abs_bbox, iou_thresh=0.15):
     sx1, sy1, sx2, sy2 = slot_abs_bbox
@@ -161,7 +312,6 @@ def analyze_shelf_image_advanced(img_array, conf_threshold=0.25):
     h, w = img_array.shape[:2]
     detection_boxes = detect_with_ensemble(img_array, conf_threshold)
     
-    # แสดงผลการตรวจจับใน sidebar
     detected_classes = list(set([det[4] for det in detection_boxes]))
     if detected_classes:
         st.sidebar.success(f"🔍 ตรวจจับ: {', '.join(detected_classes)}")
@@ -175,14 +325,12 @@ def analyze_shelf_image_advanced(img_array, conf_threshold=0.25):
         abs_bbox = rel_to_abs(slot["rel_bbox"], w, h)
         occupied, detected_class, confidence = check_slot_occupancy_advanced(detection_boxes, abs_bbox, iou_thresh=0.15)
         
-        # Fallback: ถ้าตรวจจับไม่ได้ ให้ใช้การวิเคราะห์ความสว่าง
         if not occupied:
             brightness_occupied = analyze_by_brightness(img_array, abs_bbox)
             if brightness_occupied:
                 occupied = True
                 detected_class = slot["name"]
                 confidence = 0.4
-                st.sidebar.info(f"💡 ช่อง {slot['id']} ตรวจจับได้จากความสว่าง")
         
         is_correct = False
         if occupied and detected_class:
@@ -438,136 +586,174 @@ def show_dashboard(slot_statuses):
     else:
         st.info("ไม่มีการแจ้งเตือน")
 
-# ------------------- UI หลัก -------------------
+# ==================== UI หลัก ====================
 st.title("🥤 Smart Vending Stock Monitor Pro")
-st.markdown("**ระบบตรวจจับสินค้าหมดอัจฉริยะ พร้อมเทคโนโลยี Ensemble Detection**")
+st.markdown("**ระบบตรวจจับสินค้าหมดอัจฉริยะ | รองรับการทดสอบความแม่นยำโมเดล**")
 
-# ------------------- Sidebar -------------------
-with st.sidebar:
-    st.header("⚙️ การตั้งค่า")
-    confidence_threshold = st.slider("Confidence threshold", 0.0, 1.0, 0.20, 0.01)
-    display_size = st.selectbox("ขนาดภาพ", ["เล็ก (400px)", "กลาง (600px)", "ใหญ่ (800px)"])
-    width_map = {"เล็ก (400px)": 400, "กลาง (600px)": 600, "ใหญ่ (800px)": 800}
-    display_width = width_map[display_size]
-    
-    st.markdown("---")
-    st.subheader("🎨 ตัวเลือกการแสดงผล")
-    show_grid_on_camera = st.checkbox("แสดงตาราง 11 ช่องบนภาพ", value=True)
-    
-    st.markdown("---")
-    if st.button("🗑️ ล้างประวัติการแจ้งเตือน"):
-        st.session_state.alert_history = []
-        st.session_state.last_empty = []
-        st.rerun()
-    
-    if st.button("🔄 รีเซ็ตระบบทั้งหมด"):
-        st.session_state.alert_history = []
-        st.session_state.last_empty = []
-        if os.path.exists(HISTORY_FILE):
-            os.remove(HISTORY_FILE)
-        if os.path.exists(UPLOAD_HISTORY_FILE):
-            os.remove(UPLOAD_HISTORY_FILE)
-        st.success("รีเซ็ตระบบเรียบร้อย!")
-        st.rerun()
+# เลือกโหมดหลัก
+main_mode = st.radio("เลือกโหมดหลัก", ["📦 ตรวจสอบสต็อกสินค้า", "🎯 ทดสอบความแม่นยำโมเดล"], horizontal=True)
 
-# ------------------- โหมดการทำงาน -------------------
-mode = st.radio("เลือกโหมด", ["📸 อัปโหลดภาพ", "📷 ถ่ายภาพจากกล้อง"], horizontal=True)
-
-col_left, col_right = st.columns([1, 1.2])
-
-with col_left:
-    st.subheader("🖼️ ภาพที่วิเคราะห์")
-    
-    if mode == "📸 อัปโหลดภาพ":
-        uploaded_file = st.file_uploader("เลือกภาพชั้นวางสินค้า", type=["jpg", "jpeg", "png"])
+if main_mode == "📦 ตรวจสอบสต็อกสินค้า":
+    # ------------------- โหมดตรวจสอบสต็อก -------------------
+    with st.sidebar:
+        st.header("⚙️ การตั้งค่า")
+        confidence_threshold = st.slider("Confidence threshold", 0.0, 1.0, 0.20, 0.01)
+        display_size = st.selectbox("ขนาดภาพ", ["เล็ก (400px)", "กลาง (600px)", "ใหญ่ (800px)"])
+        width_map = {"เล็ก (400px)": 400, "กลาง (600px)": 600, "ใหญ่ (800px)": 800}
+        display_width = width_map[display_size]
         
-        if uploaded_file:
-            img = Image.open(uploaded_file).convert("RGB")
-            img_array = np.array(img)
+        st.markdown("---")
+        st.subheader("🎨 ตัวเลือกการแสดงผล")
+        show_grid_on_camera = st.checkbox("แสดงตาราง 11 ช่องบนภาพ", value=True)
+        
+        st.markdown("---")
+        if st.button("🗑️ ล้างประวัติการแจ้งเตือน"):
+            st.session_state.alert_history = []
+            st.session_state.last_empty = []
+            st.rerun()
+        
+        if st.button("🔄 รีเซ็ตระบบทั้งหมด"):
+            st.session_state.alert_history = []
+            st.session_state.last_empty = []
+            if os.path.exists(HISTORY_FILE):
+                os.remove(HISTORY_FILE)
+            if os.path.exists(UPLOAD_HISTORY_FILE):
+                os.remove(UPLOAD_HISTORY_FILE)
+            st.success("รีเซ็ตระบบเรียบร้อย!")
+            st.rerun()
+    
+    mode = st.radio("เลือกโหมด", ["📸 อัปโหลดภาพ", "📷 ถ่ายภาพจากกล้อง"], horizontal=True)
+    
+    col_left, col_right = st.columns([1, 1.2])
+    
+    with col_left:
+        st.subheader("🖼️ ภาพที่วิเคราะห์")
+        
+        if mode == "📸 อัปโหลดภาพ":
+            uploaded_file = st.file_uploader("เลือกภาพชั้นวางสินค้า", type=["jpg", "jpeg", "png"])
             
-            save_upload_history(img_array, uploaded_file.name)
-            st.image(img_array, use_container_width=True)
-            
-            with st.spinner("กำลังวิเคราะห์ภาพ..."):
-                slot_statuses, empty_slots, _ = analyze_shelf_image_advanced(img_array, confidence_threshold)
-            
-            st.session_state.current_slot_statuses = slot_statuses
-            add_alerts(empty_slots, slot_statuses)
-            save_stock_history(slot_statuses)
-            
-            with col_right:
-                show_dashboard(slot_statuses)
+            if uploaded_file:
+                img = Image.open(uploaded_file).convert("RGB")
+                img_array = np.array(img)
                 
-                if empty_slots:
-                    st.error(f"⚠️ สินค้าหมด {len(empty_slots)} ช่อง: {', '.join(empty_slots)}")
-                    st.subheader("📋 รายการสินค้าที่ต้องเติม")
-                    for slot in slot_statuses:
-                        if not slot["status"]:
-                            st.write(f"  • ช่อง {slot['id']}: {slot['name']}")
-                else:
-                    wrongs = [s["id"] for s in slot_statuses if s["status"] and not s["is_correct"]]
-                    if wrongs:
-                        st.warning(f"⚠️ สินค้าผิดช่อง: {', '.join(wrongs)}")
-                    else:
-                        st.balloons()
-                        st.success("🎉 สินค้าครบทุกช่องและถูกต้อง!")
-        else:
-            st.info("⏳ กรุณาอัปโหลดภาพ")
-    
-    elif mode == "📷 ถ่ายภาพจากกล้อง":
-        camera_image = st.camera_input("ถ่ายภาพชั้นวางสินค้า")
-        
-        if camera_image:
-            img = Image.open(camera_image).convert("RGB")
-            img_array = np.array(img)
-            
-            with st.spinner("กำลังวิเคราะห์ภาพ..."):
-                slot_statuses, empty_slots, _ = analyze_shelf_image_advanced(img_array, confidence_threshold)
-            
-            st.session_state.current_slot_statuses = slot_statuses
-            add_alerts(empty_slots, slot_statuses)
-            save_stock_history(slot_statuses)
-            
-            if show_grid_on_camera:
-                img_with_grid = draw_grid_on_image_advanced(img_array, slot_statuses, show_labels=True)
-                st.image(img_with_grid, use_container_width=True)
-            else:
+                save_upload_history(img_array, uploaded_file.name)
                 st.image(img_array, use_container_width=True)
-            
-            with col_right:
-                show_dashboard(slot_statuses)
                 
-                if empty_slots:
-                    st.error(f"⚠️ สินค้าหมด {len(empty_slots)} ช่อง:")
-                    for slot_name in empty_slots:
-                        st.write(f"  • {slot_name}")
-                else:
-                    wrongs = [s["id"] for s in slot_statuses if s["status"] and not s["is_correct"]]
-                    if wrongs:
-                        st.warning(f"⚠️ สินค้าผิดช่อง: {', '.join(wrongs)}")
+                with st.spinner("กำลังวิเคราะห์ภาพ..."):
+                    slot_statuses, empty_slots, _ = analyze_shelf_image_advanced(img_array, confidence_threshold)
+                
+                st.session_state.current_slot_statuses = slot_statuses
+                add_alerts(empty_slots, slot_statuses)
+                save_stock_history(slot_statuses)
+                
+                with col_right:
+                    show_dashboard(slot_statuses)
+                    
+                    if empty_slots:
+                        st.error(f"⚠️ สินค้าหมด {len(empty_slots)} ช่อง: {', '.join(empty_slots)}")
+                        st.subheader("📋 รายการสินค้าที่ต้องเติม")
+                        for slot in slot_statuses:
+                            if not slot["status"]:
+                                st.write(f"  • ช่อง {slot['id']}: {slot['name']}")
                     else:
-                        st.balloons()
-                        st.success("🎉 สินค้าครบทุกช่อง!")
-        else:
-            st.info("📷 กดปุ่มกล้องเพื่อถ่ายภาพ")
+                        wrongs = [s["id"] for s in slot_statuses if s["status"] and not s["is_correct"]]
+                        if wrongs:
+                            st.warning(f"⚠️ สินค้าผิดช่อง: {', '.join(wrongs)}")
+                        else:
+                            st.balloons()
+                            st.success("🎉 สินค้าครบทุกช่องและถูกต้อง!")
+            else:
+                st.info("⏳ กรุณาอัปโหลดภาพ")
+        
+        elif mode == "📷 ถ่ายภาพจากกล้อง":
+            camera_image = st.camera_input("ถ่ายภาพชั้นวางสินค้า")
+            
+            if camera_image:
+                img = Image.open(camera_image).convert("RGB")
+                img_array = np.array(img)
+                
+                with st.spinner("กำลังวิเคราะห์ภาพ..."):
+                    slot_statuses, empty_slots, _ = analyze_shelf_image_advanced(img_array, confidence_threshold)
+                
+                st.session_state.current_slot_statuses = slot_statuses
+                add_alerts(empty_slots, slot_statuses)
+                save_stock_history(slot_statuses)
+                
+                if show_grid_on_camera:
+                    img_with_grid = draw_grid_on_image_advanced(img_array, slot_statuses, show_labels=True)
+                    st.image(img_with_grid, use_container_width=True)
+                else:
+                    st.image(img_array, use_container_width=True)
+                
+                with col_right:
+                    show_dashboard(slot_statuses)
+                    
+                    if empty_slots:
+                        st.error(f"⚠️ สินค้าหมด {len(empty_slots)} ช่อง:")
+                        for slot_name in empty_slots:
+                            st.write(f"  • {slot_name}")
+                    else:
+                        wrongs = [s["id"] for s in slot_statuses if s["status"] and not s["is_correct"]]
+                        if wrongs:
+                            st.warning(f"⚠️ สินค้าผิดช่อง: {', '.join(wrongs)}")
+                        else:
+                            st.balloons()
+                            st.success("🎉 สินค้าครบทุกช่อง!")
+            else:
+                st.info("📷 กดปุ่มกล้องเพื่อถ่ายภาพ")
 
-# ------------------- ส่วนท้าย -------------------
-st.markdown("---")
-with st.expander("📄 คู่มือการใช้งาน"):
-    st.markdown("""
-    ### 🥤 Smart Vending Stock Monitor Pro
+else:
+    # ==================== โหมดทดสอบความแม่นยำโมเดล ====================
+    st.markdown("---")
+    st.subheader("🎯 ทดสอบความแม่นยำของโมเดล")
+    st.markdown("อัปโหลดภาพสินค้า แล้วระบบจะทำนายว่าคือสินค้าชนิดไหน พร้อมแสดงความมั่นใจ")
     
-    **เทคโนโลยีที่ใช้:**
-    - Ensemble Detection: ตรวจจับหลายรูปแบบ
-    - Fallback Detection: วิเคราะห์ความสว่างเมื่อตรวจจับไม่ได้
-    - Confidence Scoring: แสดงความมั่นใจในการตรวจจับ
+    # Sidebar สำหรับโหมดทดสอบ
+    with st.sidebar:
+        st.header("🎯 การทดสอบโมเดล")
+        val_confidence = st.slider("Confidence threshold (ทดสอบ)", 0.0, 1.0, 0.20, 0.01)
+        
+        st.markdown("---")
+        st.subheader("📊 สถิติความแม่นยำ")
+        accuracy_stats = calculate_model_accuracy()
+        if accuracy_stats:
+            st.metric("ความแม่นยำรวม", f"{accuracy_stats['accuracy']:.1%}")
+            st.metric("จำนวนทดสอบทั้งหมด", accuracy_stats['total_tests'])
+            col_a, col_b = st.columns(2)
+            col_a.metric("ถูกต้อง", accuracy_stats['correct'])
+            col_b.metric("ผิดพลาด", accuracy_stats['wrong'])
+        else:
+            st.info("ยังไม่มีข้อมูลการทดสอบ")
+        
+        st.markdown("---")
+        if st.button("🗑️ ล้างประวัติการทดสอบ"):
+            if os.path.exists(VALIDATION_HISTORY_FILE):
+                os.remove(VALIDATION_HISTORY_FILE)
+            st.success("ล้างประวัติเรียบร้อย!")
+            st.rerun()
     
-    **ความหมายของสีกรอบ:**
-    - 🟢 เขียว = มีสินค้าและถูกต้อง
-    - 🟠 ส้ม = มีสินค้าแต่ผิดช่อง
-    - 🔴 แดง = สินค้าหมด
+    col_test_left, col_test_right = st.columns([1, 1])
     
-    **คำแนะนำ:**
-    - ปรับ Confidence threshold (0.15-0.25 เหมาะสม)
-    - ถ่ายภาพให้ตรงและแสงสว่างเพียงพอ
-    """)
+    with col_test_left:
+        st.subheader("📸 อัปโหลดภาพสินค้า")
+        test_file = st.file_uploader("เลือกภาพสินค้า", type=["jpg", "jpeg", "png"], key="test_uploader")
+        
+        if test_file:
+            img = Image.open(test_file).convert("RGB")
+            img_array = np.array(img)
+            
+            st.image(img_array, caption="ภาพที่อัปโหลด", use_container_width=True)
+            
+            # เลือกป้ายกำกับจริง (สำหรับวัด accuracy)
+            st.subheader("🏷️ ป้ายกำกับจริง (สำหรับวัดความแม่นยำ)")
+            actual_label = st.selectbox(
+                "เลือกว่าภาพนี้คือสินค้าอะไร (ไม่เลือกก็ได้)",
+                ["(ไม่ระบุ)"] + CLASS_NAMES,
+                index=0
+            )
+            actual_label = None if actual_label == "(ไม่ระบุ)" else actual_label
+            
+            with st.spinner("กำลังทำนาย..."):
+                predictions = predict_single_product(img_array, val_confidence)
+            
+            # แสดงภาพพร้อมกรอบทำนาย

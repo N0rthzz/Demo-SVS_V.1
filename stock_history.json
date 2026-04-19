@@ -1,0 +1,69 @@
+{
+  "S01": {
+    "status": false,
+    "detected": "ไม่มีสินค้า",
+    "is_correct": false,
+    "confidence": 0.0
+  },
+  "S02": {
+    "status": false,
+    "detected": "ไม่มีสินค้า",
+    "is_correct": false,
+    "confidence": 0.0
+  },
+  "S03": {
+    "status": false,
+    "detected": "ไม่มีสินค้า",
+    "is_correct": false,
+    "confidence": 0.0
+  },
+  "S04": {
+    "status": false,
+    "detected": "ไม่มีสินค้า",
+    "is_correct": false,
+    "confidence": 0.0
+  },
+  "S05": {
+    "status": false,
+    "detected": "ไม่มีสินค้า",
+    "is_correct": false,
+    "confidence": 0.0
+  },
+  "S06": {
+    "status": true,
+    "detected": "Green Tea Bottle",
+    "is_correct": true,
+    "confidence": 0.31878501197670794
+  },
+  "S07": {
+    "status": true,
+    "detected": "Green Tea Bottle",
+    "is_correct": false,
+    "confidence": 0.5968008936916428
+  },
+  "S08": {
+    "status": false,
+    "detected": "ไม่มีสินค้า",
+    "is_correct": false,
+    "confidence": 0.0
+  },
+  "S09": {
+    "status": false,
+    "detected": "ไม่มีสินค้า",
+    "is_correct": false,
+    "confidence": 0.0
+  },
+  "S10": {
+    "status": true,
+    "detected": "UHT milk carton",
+    "is_correct": true,
+    "confidence": 0.7781491100728682
+  },
+  "S11": {
+    "status": false,
+    "detected": "ไม่มีสินค้า",
+    "is_correct": false,
+    "confidence": 0.0
+  },
+  "last_update": "2026-04-20T00:15:35.762847"
+}
