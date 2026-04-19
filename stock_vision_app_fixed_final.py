@@ -5,17 +5,18 @@ import numpy as np
 from PIL import Image
 import pandas as pd
 from datetime import datetime
+from collections import Counter
 
-st.set_page_config(page_title="Stock Vision System - 11 Slots", layout="wide")
+# ------------------- ตั้งค่า page config -------------------
+st.set_page_config(page_title="Stock Vision System - Complete", layout="wide")
 
 # ------------------- โหลดโมเดล -------------------
 @st.cache_resource
 def load_model():
-    return YOLO('best.pt')
+    model = YOLO('best.pt')
+    return model
 
 model = load_model()
-
-# ------------------- ชื่อคลาสสินค้าทั้งหมด -------------------
 CLASS_NAMES = [
     "Canned tea", "Coconut Water Carton", "Coffee Can", "Drinking water",
     "Empty_Stock", "Energy Drink", "Green Tea Bottle", "Juice Box",
@@ -24,17 +25,17 @@ CLASS_NAMES = [
 
 # ------------------- กำหนด 11 ช่องพร้อมสินค้าประจำช่อง -------------------
 SLOTS = [
-    {"id": "S01", "name": "สมุนไพร", "expected_class": None},
-    {"id": "S02", "name": "Coconut Water Carton", "expected_class": "Coconut Water Carton"},
-    {"id": "S03", "name": "Coffee Can", "expected_class": "Coffee Can"},
-    {"id": "S04", "name": "Drinking water", "expected_class": "Drinking water"},
-    {"id": "S05", "name": "Energy Drink", "expected_class": "Energy Drink"},
-    {"id": "S06", "name": "Green Tea Bottle", "expected_class": "Green Tea Bottle"},
-    {"id": "S07", "name": "Juice Box", "expected_class": "Juice Box"},
-    {"id": "S08", "name": "Protein Drink", "expected_class": "Protein Drink"},
-    {"id": "S09", "name": "Soda Can", "expected_class": "Soda Can"},
-    {"id": "S10", "name": "UHT milk carton", "expected_class": "UHT milk carton"},
-    {"id": "S11", "name": "Vitamin Drink", "expected_class": "Vitamin Drink"},
+    {"id": "S01", "name": "Canned tea", "expected_class": None, "status": False, "detected_product": ""},
+    {"id": "S02", "name": "Coconut Water Carton", "expected_class": "Coconut Water Carton", "status": False, "detected_product": ""},
+    {"id": "S03", "name": "Coffee Can", "expected_class": "Coffee Can", "status": False, "detected_product": ""},
+    {"id": "S04", "name": "Drinking water", "expected_class": "Drinking water", "status": False, "detected_product": ""},
+    {"id": "S05", "name": "Energy Drink", "expected_class": "Energy Drink", "status": False, "detected_product": ""},
+    {"id": "S06", "name": "Green Tea Bottle", "expected_class": "Green Tea Bottle", "status": False, "detected_product": ""},
+    {"id": "S07", "name": "Juice Box", "expected_class": "Juice Box", "status": False, "detected_product": ""},
+    {"id": "S08", "name": "Protein Drink", "expected_class": "Protein Drink", "status": False, "detected_product": ""},
+    {"id": "S09", "name": "Soda Can", "expected_class": "Soda Can", "status": False, "detected_product": ""},
+    {"id": "S10", "name": "UHT milk carton", "expected_class": "UHT milk carton", "status": False, "detected_product": ""},
+    {"id": "S11", "name": "Vitamin Drink", "expected_class": "Vitamin Drink", "status": False, "detected_product": ""},
 ]
 
 # ------------------- ฟังก์ชันตรวจจับสินค้า -------------------
@@ -49,100 +50,264 @@ def detect_products(img_array, conf_threshold=0.25):
                 detected.append(class_name)
     return detected
 
-# ------------------- จับคู่สินค้าที่ตรวจพบกับช่อง -------------------
+# ------------------- จับคู่สินค้ากับช่อง -------------------
 def match_products_to_slots(detected_products, slots):
-    # นับจำนวนสินค้าที่ตรวจพบแต่ละชนิด
-    from collections import Counter
     product_count = Counter(detected_products)
+    updated_slots = []
     
-    # อัปเดตสถานะแต่ละช่อง
     for slot in slots:
+        new_slot = slot.copy()
         expected = slot["expected_class"]
+        
         if expected is None:
-            # ช่อง S01 ไม่มีสินค้าตายตัว ตรวจจับอะไรก็ได้
-            slot["status"] = len(detected_products) > 0
-            slot["detected_product"] = ", ".join(set(detected_products)) if detected_products else "ไม่มี"
+            # S01: รับสินค้าอะไรก็ได้
+            new_slot["status"] = len(detected_products) > 0
+            new_slot["detected_product"] = ", ".join(set(detected_products)) if detected_products else "ไม่มี"
         else:
             if expected in product_count and product_count[expected] > 0:
-                slot["status"] = True
-                slot["detected_product"] = expected
-                product_count[expected] -= 1  # ใช้ไป 1 ชิ้น
+                new_slot["status"] = True
+                new_slot["detected_product"] = expected
+                product_count[expected] -= 1
             else:
-                slot["status"] = False
-                slot["detected_product"] = "หมด"
-    return slots
+                new_slot["status"] = False
+                new_slot["detected_product"] = "หมด"
+        updated_slots.append(new_slot)
+    
+    return updated_slots
 
 # ------------------- UI หลัก -------------------
-st.title("📦 ระบบตรวจสอบสินค้า 11 ช่อง")
-st.markdown("**อัปโหลดภาพ → ระบบตรวจจับสินค้า → อัปเดตตารางสถานะอัตโนมัติ**")
+st.title("📦 Stock Vision System (Complete)")
+st.markdown("**ระบบตรวจสอบสินค้า 11 ช่อง | แยกตารางสถานะ | แจ้งเตือนอัตโนมัติ**")
 
-# Sidebar
+# ------------------- Session State สำหรับเก็บข้อมูล -------------------
+if 'last_empty' not in st.session_state:
+    st.session_state.last_empty = []
+if 'alert_history' not in st.session_state:
+    st.session_state.alert_history = []
+if 'last_detected_products' not in st.session_state:
+    st.session_state.last_detected_products = []
+if 'last_slot_statuses' not in st.session_state:
+    st.session_state.last_slot_statuses = SLOTS.copy()
+if 'last_image' not in st.session_state:
+    st.session_state.last_image = None
+if 'current_image' not in st.session_state:
+    st.session_state.current_image = None
+
+# ------------------- ฟังก์ชันแจ้งเตือน -------------------
+def add_alerts(empty_slots):
+    if set(empty_slots) != set(st.session_state.last_empty):
+        new_empty = set(empty_slots) - set(st.session_state.last_empty)
+        for slot_name in new_empty:
+            msg = f"⚠️ สินค้าหมด: {slot_name}"
+            st.session_state.alert_history.insert(0, {"time": datetime.now().strftime("%H:%M:%S"), "message": msg})
+            st.toast(msg, icon="🔴")
+        st.session_state.last_empty = empty_slots.copy()
+        if len(st.session_state.alert_history) > 20:
+            st.session_state.alert_history.pop()
+
+# ------------------- ฟังก์ชันแสดง Dashboard -------------------
+def show_dashboard(slot_statuses):
+    total = len(slot_statuses)
+    occupied = sum(1 for s in slot_statuses if s["status"])
+    empty = total - occupied
+    
+    c1, c2, c3 = st.columns(3)
+    c1.metric("ช่องทั้งหมด", total)
+    c2.metric("✅ มีสินค้า", occupied)
+    c3.metric("❌ สินค้าหมด", empty)
+    
+    st.subheader("📊 แผนผังชั้นวาง (รหัสสี)")
+    cols = st.columns(4)
+    for idx, s in enumerate(slot_statuses):
+        with cols[idx % 4]:
+            color = "#d4edda" if s["status"] else "#f8d7da"
+            border = "2px solid #28a745" if s["status"] else "2px solid #dc3545"
+            st.markdown(f"""
+            <div style="background-color:{color}; padding:10px; border-radius:10px; margin:5px; text-align:center; border:{border};">
+                <b>{s['id']}</b><br>
+                <small>{s['name']}</small><br>
+                <span style="color:{'green' if s['status'] else 'red'}; font-weight:bold;">
+                    {'✅ มีสินค้า' if s['status'] else '❌ สินค้าหมด'}
+                </span><br>
+                <small style="color:gray;">🔍 {s['detected_product']}</small>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    st.subheader("🔔 ประวัติการแจ้งเตือน")
+    if st.session_state.alert_history:
+        df_alerts = pd.DataFrame(st.session_state.alert_history)
+        st.dataframe(df_alerts, use_container_width=True, height=200)
+    else:
+        st.info("ยังไม่มีการแจ้งเตือน")
+
+# ------------------- Sidebar -------------------
 with st.sidebar:
-    st.header("⚙️ ตั้งค่า")
-    confidence = st.slider("ค่า Confidence", 0.0, 1.0, 0.25, 0.01)
+    st.header("⚙️ การตั้งค่า")
+    confidence_threshold = st.slider("Confidence threshold", 0.0, 1.0, 0.25, 0.01)
+    display_size = st.selectbox("ขนาดภาพ", ["เล็ก (400px)", "กลาง (600px)", "ใหญ่ (800px)"])
+    width_map = {"เล็ก (400px)": 400, "กลาง (600px)": 600, "ใหญ่ (800px)": 800}
+    display_width = width_map[display_size]
+    
     st.markdown("---")
-    st.caption("สินค้าที่รองรับ: " + ", ".join([s["name"] for s in SLOTS if s["expected_class"] is not None]))
+    st.subheader("📸 ตัวเลือกการแสดงผล")
+    show_image_only = st.checkbox("แสดงเฉพาะภาพ (ไม่แสดงตารางข้าง)", value=False)
+    
+    st.markdown("---")
+    if st.button("🗑️ ล้างประวัติการแจ้งเตือน"):
+        st.session_state.alert_history = []
+        st.session_state.last_empty = []
+        st.rerun()
 
-# โหมดอัปโหลด
-uploaded_file = st.file_uploader("📸 อัปโหลดภาพชั้นวางสินค้า", type=["jpg", "jpeg", "png"])
+# ------------------- โหมดการทำงาน -------------------
+mode = st.radio("เลือกโหมด", ["📸 อัปโหลดภาพ", "📷 ถ่ายภาพจากกล้อง"], horizontal=True)
 
-# สร้าง 2 คอลัมน์: ซ้าย=รูป, ขวา=ตาราง
-col_left, col_right = st.columns([1, 1.2])
+# สร้างคอลัมน์
+if not show_image_only:
+    col_left, col_right = st.columns([1, 1.2])
+else:
+    col_left, col_right = st.columns([1, 0])
+    with col_right:
+        st.empty()
 
 with col_left:
-    st.subheader("🖼️ ภาพที่อัปโหลด")
-    if uploaded_file:
-        image = Image.open(uploaded_file).convert("RGB")
-        st.image(image, use_container_width=True)
+    st.subheader("🖼️ ภาพที่วิเคราะห์")
+    
+    # ------------------- โหมดอัปโหลด -------------------
+    if mode == "📸 อัปโหลดภาพ":
+        uploaded_file = st.file_uploader("เลือกภาพชั้นวางสินค้า", type=["jpg", "jpeg", "png"], key="uploader")
         
-        # ตรวจจับสินค้า
-        img_array = np.array(image)
-        detected_products = detect_products(img_array, confidence)
-        
-        with col_right:
-            st.subheader("📋 สถานะสินค้า 11 ช่อง")
+        if uploaded_file:
+            # อ่านภาพใหม่
+            img = Image.open(uploaded_file).convert("RGB")
+            st.session_state.current_image = np.array(img)
             
-            # จับคู่และอัปเดตสถานะ
-            SLOTS_UPDATED = match_products_to_slots(detected_products, SLOTS.copy())
+            # แสดงภาพ
+            st.image(st.session_state.current_image, use_container_width=True)
             
-            # แสดงตาราง
-            df_data = []
-            for slot in SLOTS_UPDATED:
-                df_data.append({
-                    "ช่อง": slot["id"],
-                    "สินค้าประจำช่อง": slot["name"],
-                    "สถานะ": "✅ มีสินค้า" if slot["status"] else "❌ สินค้าหมด",
-                    "สินค้าที่ตรวจพบ": slot["detected_product"]
-                })
+            # ตรวจจับสินค้า
+            detected = detect_products(st.session_state.current_image, confidence_threshold)
+            st.session_state.last_detected_products = detected
             
-            df = pd.DataFrame(df_data)
-            st.dataframe(df, use_container_width=True, height=500)
+            # จับคู่กับช่อง
+            updated_slots = match_products_to_slots(detected, SLOTS)
+            st.session_state.last_slot_statuses = updated_slots
             
-            # สถิติ
-            total = len(SLOTS_UPDATED)
-            instock = sum(1 for s in SLOTS_UPDATED if s["status"])
-            outofstock = total - instock
+            # ตรวจสอบสินค้าหมด
+            empty_slots = [s["name"] for s in updated_slots if not s["status"]]
+            add_alerts(empty_slots)
             
-            c1, c2, c3 = st.columns(3)
-            c1.metric("ช่องทั้งหมด", total)
-            c2.metric("✅ มีสินค้า", instock)
-            c3.metric("❌ สินค้าหมด", outofstock)
-            
-            # รายการสินค้าที่ตรวจพบ
-            with st.expander("🔍 สินค้าที่ตรวจจับได้ในภาพ"):
-                if detected_products:
-                    st.write(", ".join(set(detected_products)))
+            # แสดงรายละเอียดใน col_right
+            with col_right:
+                st.subheader("📋 สถานะสินค้า 11 ช่อง")
+                
+                # แสดงตาราง
+                df_data = []
+                for slot in updated_slots:
+                    df_data.append({
+                        "ช่อง": slot["id"],
+                        "สินค้า": slot["name"],
+                        "สถานะ": "✅ มีสินค้า" if slot["status"] else "❌ สินค้าหมด",
+                        "ที่ตรวจพบ": slot["detected_product"]
+                    })
+                df = pd.DataFrame(df_data)
+                st.dataframe(df, use_container_width=True, height=500)
+                
+                # แสดง Dashboard
+                show_dashboard(updated_slots)
+                
+                # แจ้งเตือนสรุป
+                if empty_slots:
+                    st.warning(f"⚠️ พบช่องว่าง {len(empty_slots)} ช่อง: {', '.join(empty_slots[:5])}")
+                    if len(empty_slots) > 5:
+                        st.caption(f"...และอีก {len(empty_slots)-5} ช่อง")
                 else:
-                    st.warning("ไม่พบสินค้าใดๆ ในภาพ")
+                    st.balloons()
+                    st.success("🎉 สินค้าครบทุกช่อง!")
+                
+                # แสดงสินค้าที่ตรวจพบทั้งหมด
+                with st.expander("🔍 สินค้าที่ตรวจพบทั้งหมดในภาพ"):
+                    if detected:
+                        st.write(", ".join(set(detected)))
+                        st.caption(f"จำนวนทั้งหมด: {len(detected)} ชิ้น")
+                    else:
+                        st.warning("ไม่พบสินค้าใดๆ ในภาพ")
+        else:
+            st.info("⏳ กรุณาอัปโหลดภาพเพื่อเริ่มตรวจสอบ")
+            # แสดงภาพเดิมถ้ามี
+            if st.session_state.last_image is not None:
+                st.image(st.session_state.last_image, caption="ภาพล่าสุด", use_container_width=True)
+    
+    # ------------------- โหมดถ่ายภาพ -------------------
+    elif mode == "📷 ถ่ายภาพจากกล้อง":
+        camera_image = st.camera_input("ถ่ายภาพชั้นวางสินค้า", key="camera")
+        
+        if camera_image:
+            img = Image.open(camera_image).convert("RGB")
+            st.session_state.current_image = np.array(img)
             
-            # แจ้งเตือน
-            empty_slots = [s["name"] for s in SLOTS_UPDATED if not s["status"]]
-            if empty_slots:
-                st.error(f"⚠️ สินค้าหมด {len(empty_slots)} ช่อง: {', '.join(empty_slots)}")
-            else:
-                st.success("🎉 สินค้าครบทุกช่อง!")
-    else:
-        with col_left:
-            st.info("⏳ รออัปโหลดภาพ...")
-        with col_right:
-            st.info("📊 จะแสดงสถานะสินค้าหลังจากอัปโหลดภาพ")
+            st.image(st.session_state.current_image, use_container_width=True)
+            
+            detected = detect_products(st.session_state.current_image, confidence_threshold)
+            st.session_state.last_detected_products = detected
+            
+            updated_slots = match_products_to_slots(detected, SLOTS)
+            st.session_state.last_slot_statuses = updated_slots
+            
+            empty_slots = [s["name"] for s in updated_slots if not s["status"]]
+            add_alerts(empty_slots)
+            
+            with col_right:
+                st.subheader("📋 สถานะสินค้า 11 ช่อง")
+                df_data = []
+                for slot in updated_slots:
+                    df_data.append({
+                        "ช่อง": slot["id"],
+                        "สินค้า": slot["name"],
+                        "สถานะ": "✅ มีสินค้า" if slot["status"] else "❌ สินค้าหมด",
+                        "ที่ตรวจพบ": slot["detected_product"]
+                    })
+                df = pd.DataFrame(df_data)
+                st.dataframe(df, use_container_width=True, height=500)
+                
+                show_dashboard(updated_slots)
+                
+                if empty_slots:
+                    st.warning(f"⚠️ พบช่องว่าง {len(empty_slots)} ช่อง: {', '.join(empty_slots)}")
+                else:
+                    st.balloons()
+                    st.success("🎉 สินค้าครบทุกช่อง!")
+                
+                with st.expander("🔍 สินค้าที่ตรวจพบทั้งหมด"):
+                    if detected:
+                        st.write(", ".join(set(detected)))
+                    else:
+                        st.warning("ไม่พบสินค้า")
+        else:
+            st.info("📷 กดปุ่มกล้องเพื่อถ่ายภาพ")
+            if st.session_state.last_image is not None:
+                st.image(st.session_state.last_image, caption="ภาพล่าสุด", use_container_width=True)
+
+# บันทึกภาพล่าสุด
+if st.session_state.current_image is not None:
+    st.session_state.last_image = st.session_state.current_image.copy()
+
+# ------------------- ส่วนท้าย: รายงาน -------------------
+st.markdown("---")
+with st.expander("📄 รายงานสรุปและสถิติ"):
+    if st.button("📊 สร้างรายงานสถานะปัจจุบัน"):
+        if st.session_state.last_slot_statuses:
+            df_report = pd.DataFrame([{
+                "ช่อง": s["id"],
+                "สินค้า": s["name"],
+                "สถานะ": "มีสินค้า" if s["status"] else "หมด",
+                "สินค้าที่ตรวจพบ": s["detected_product"]
+            } for s in st.session_state.last_slot_statuses])
+            st.dataframe(df_report, use_container_width=True)
+            
+            # สรุปสถิติการแจ้งเตือน
+            if st.session_state.alert_history:
+                st.subheader("สถิติการแจ้งเตือน")
+                alert_df = pd.DataFrame(st.session_state.alert_history)
+                st.bar_chart(alert_df['message'].value_counts())
+        else:
+            st.info("ยังไม่มีข้อมูล")
