@@ -25,7 +25,7 @@ CLASS_NAMES = [
 
 # ------------------- กำหนด Shelf Slot 11 ช่อง (ตำแหน่งคงที่) -------------------
 SLOT_RELATIVE_BOXES = [
-    {"id": "S01", "name": "สมุนไพร", "rel_bbox": [0.05, 0.10, 0.20, 0.35]},
+    {"id": "S01", "name": "Canned tea", "rel_bbox": [0.05, 0.10, 0.20, 0.35]},
     {"id": "S02", "name": "Coconut Water Carton", "rel_bbox": [0.22, 0.10, 0.37, 0.35]},
     {"id": "S03", "name": "Coffee Can", "rel_bbox": [0.39, 0.10, 0.54, 0.35]},
     {"id": "S04", "name": "Drinking water", "rel_bbox": [0.56, 0.10, 0.71, 0.35]},
@@ -65,6 +65,9 @@ def check_slot_occupancy(detection_boxes, slot_abs_bbox, iou_thresh=0.1):
                 best_class = class_name
     return best_iou > iou_thresh, best_class
 
+# เพิ่ม BLACKLIST_CLASSES สำหรับคลาสที่ไม่อยากให้ตรวจจับ
+BLACKLIST_CLASSES = ["Canned tea"]  # เพิ่มคลาสที่ไม่อยากให้แสดง
+
 def analyze_shelf_image(img_array, conf_threshold=0.25):
     results = model(img_array, conf=conf_threshold)
     h, w = img_array.shape[:2]
@@ -74,12 +77,14 @@ def analyze_shelf_image(img_array, conf_threshold=0.25):
         for box in results[0].boxes:
             cls_id = int(box.cls[0])
             class_name = CLASS_NAMES[cls_id]
+            
+            # ✅ ข้ามคลาสที่อยู่ใน Blacklist
+            if class_name in BLACKLIST_CLASSES:
+                continue
+                
             if class_name != "Empty_Stock":
                 x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
                 detection_boxes.append([x1, y1, x2, y2, class_name])
-    
-    slot_statuses = []
-    empty_slots = []
     
     for slot in SLOT_RELATIVE_BOXES:
         abs_bbox = rel_to_abs(slot["rel_bbox"], w, h)
