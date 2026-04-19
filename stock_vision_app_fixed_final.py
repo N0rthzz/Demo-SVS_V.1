@@ -203,6 +203,91 @@ elif mode == "📷 ถ่ายภาพจากกล้อง":
             add_alerts(empty)
         else:
             st.success("ครบ")
+# ------------------- ส่วนระบบจำลองตู้แช่ (Simulation Mode) -------------------
+if mode == "🖥️ จำลองตู้แช่ (Simulation)":
+    st.subheader("🧊 ระบบจำลองสถานะตู้แช่ 11 ช่อง")
+    st.info("ลองกดปุ่มเพื่อจำลองการนำสินค้าเข้า-ออก ระบบจะล็อกตำแหน่งตามประเภทสินค้า")
+
+    # 1. สร้าง Session State สำหรับเก็บสถานะสินค้าในตู้ (ถ้ายังไม่มี)
+    if 'shelf_state' not in st.session_state:
+        # เริ่มต้นให้ทุกช่องเป็น False (สีแดง)
+        st.session_state.shelf_state = {slot['id']: False for slot in SLOT_RELATIVE_BOXES}
+
+    # 2. ฟังก์ชันสำหรับเพิ่ม/ลดสินค้า
+    def toggle_stock(slot_id, action):
+        if action == "add":
+            st.session_state.shelf_state[slot_id] = True
+            # st.toast(f"✅ เพิ่ม {slot_id} เข้าตู้แล้ว", icon="🟢")
+        else:
+            st.session_state.shelf_state[slot_id] = False
+            # st.toast(f"❌ นำ {slot_id} ออกจากตู้", icon="🔴")
+
+    # 3. จัดกลุ่มสินค้าตามชั้น (3-3-3-2)
+    shelf_rows = [
+        SLOT_RELATIVE_BOXES[0:3],  # ชั้น 1 (ขวด)
+        SLOT_RELATIVE_BOXES[3:6],  # ชั้น 2 (ขวด/โปรตีน) - ปรับตามข้อมูลคุณ
+        SLOT_RELATIVE_BOXES[6:9],  # ชั้น 3 (กระป๋อง)
+        SLOT_RELATIVE_BOXES[9:11]  # ชั้น 4 (กล่อง)
+    ]
+
+    # 4. แสดงผล Graphic ตู้แช่
+    st.markdown("### 📊 หน้าจอแสดงผลตู้แช่ (Visual Monitor)")
+    
+    # สร้าง Container สำหรับตู้แช่
+    with st.container():
+        for row_idx, row_slots in enumerate(shelf_rows):
+            cols = st.columns(len(row_slots))
+            for i, slot in enumerate(row_slots):
+                is_instock = st.session_state.shelf_state[slot['id']]
+                bg_color = "#d4edda" if is_instock else "#f8d7da" # เขียว/แดง
+                border_color = "#28a745" if is_instock else "#dc3545"
+                text_status = "IN STOCK" if is_instock else "OUT OF STOCK"
+                
+                with cols[i]:
+                    st.markdown(f"""
+                        <div style="
+                            background-color:{bg_color}; 
+                            border: 2px solid {border_color}; 
+                            padding:15px; 
+                            border-radius:10px; 
+                            text-align:center;
+                            min-height: 120px;
+                            margin-bottom: 10px;">
+                            <span style="font-size: 0.8rem; font-weight: bold;">{slot['id']}</span><br>
+                            <b style="font-size: 1rem;">{slot['name']}</b><br>
+                            <hr style="margin: 8px 0;">
+                            <span style="color:{border_color}; font-weight: bold;">{text_status}</span>
+                        </div>
+                    """, unsafe_allow_html=True)
+
+    st.markdown("---")
+    
+    # 5. ส่วนควบคุม (Control Panel)
+    st.subheader("🕹️ แผงควบคุมสินค้า (Stock Control)")
+    c1, c2 = st.columns(2)
+    
+    with c1:
+        st.write("➕ **เติมสินค้าเข้าชั้น**")
+        for slot in SLOT_RELATIVE_BOXES:
+            if not st.session_state.shelf_state[slot['id']]:
+                if st.button(f"เติม: {slot['name']}", key=f"add_{slot['id']}", use_container_width=True):
+                    toggle_stock(slot['id'], "add")
+                    st.rerun()
+
+    with c2:
+        st.write("➖ **นำสินค้าออก/สินค้าหมด**")
+        for slot in SLOT_RELATIVE_BOXES:
+            if st.session_state.shelf_state[slot['id']]:
+                if st.button(f"หมด: {slot['name']}", key=f"rem_{slot['id']}", use_container_width=True):
+                    toggle_stock(slot['id'], "rem")
+                    st.rerun()
+
+    # 6. แจ้งเตือนรวม (Summary Alerts)
+    missing_items = [s['name'] for s in SLOT_RELATIVE_BOXES if not st.session_state.shelf_state[s['id']]]
+    if missing_items:
+        st.warning(f"⚠️ **สินค้าที่ต้องเติมด่วน:** {', '.join(missing_items)}")
+    else:
+        st.success("✅ **สินค้าเต็มตู้!** ทุกรายการพร้อมจำหน่าย")
 
 # ------------------- รายงาน -------------------
 # st.markdown("---")
