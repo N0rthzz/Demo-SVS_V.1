@@ -462,37 +462,52 @@ def calculate_model_accuracy():
 
 # ==================== ฟังก์ชัน Simulation Mode ====================
 def save_simulation_state(slot_statuses):
-    state = []
+    """บันทึกสถานะ Simulation"""
+    state = {
+        "slots": [],  # เปลี่ยนเป็น dictionary ที่มี key "slots"
+        "last_update": datetime.now().isoformat()
+    }
+    
     for slot in slot_statuses:
-        state.append({
+        state["slots"].append({
             "id": slot["id"],
             "name": slot["name"],
             "status": slot["status"]
         })
-    state["last_update"] = datetime.now().isoformat()
     
     try:
         with open(SIMULATION_FILE, "w", encoding="utf-8") as f:
             json.dump(state, f, indent=2, ensure_ascii=False, default=str)
     except Exception as e:
-        pass
+        print(f"Error saving simulation state: {e}")
 
 def load_simulation_state():
+    """โหลดสถานะ Simulation"""
     if os.path.exists(SIMULATION_FILE):
         try:
             with open(SIMULATION_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
+                data = json.load(f)
+                # รองรับทั้งรูปแบบเก่าและใหม่
+                if isinstance(data, list):
+                    # รูปแบบเก่า (list)
+                    return data
+                elif isinstance(data, dict) and "slots" in data:
+                    # รูปแบบใหม่ (dict with slots)
+                    return data["slots"]
+                else:
+                    return None
         except:
             return None
     return None
 
 def get_default_simulation_slots():
+    """สร้างสถานะเริ่มต้นสำหรับ Simulation (มีสินค้าทุกช่อง)"""
     slots = []
     for slot in SLOT_RELATIVE_BOXES:
         slots.append({
             "id": slot["id"],
             "name": slot["name"],
-            "status": True
+            "status": True  # มีสินค้าทุกช่องเริ่มต้น
         })
     return slots
 

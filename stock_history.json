@@ -18,10 +18,10 @@
     "confidence": 0.0
   },
   "S04": {
-    "status": true,
-    "detected": "Drinking water",
-    "is_correct": true,
-    "confidence": 0.4
+    "status": false,
+    "detected": "ไม่มีสินค้า",
+    "is_correct": false,
+    "confidence": 0.0
   },
   "S05": {
     "status": false,
@@ -36,34 +36,34 @@
     "confidence": 0.0
   },
   "S07": {
-    "status": true,
-    "detected": "Juice Box",
-    "is_correct": true,
-    "confidence": 0.4
+    "status": false,
+    "detected": "ไม่มีสินค้า",
+    "is_correct": false,
+    "confidence": 0.0
   },
   "S08": {
-    "status": true,
-    "detected": "Protein Drink",
-    "is_correct": true,
-    "confidence": 0.4
+    "status": false,
+    "detected": "ไม่มีสินค้า",
+    "is_correct": false,
+    "confidence": 0.0
   },
   "S09": {
-    "status": true,
-    "detected": "Soda Can",
-    "is_correct": true,
-    "confidence": 0.4
+    "status": false,
+    "detected": "ไม่มีสินค้า",
+    "is_correct": false,
+    "confidence": 0.0
   },
   "S10": {
-    "status": true,
-    "detected": "UHT milk carton",
-    "is_correct": true,
-    "confidence": 0.4
+    "status": false,
+    "detected": "ไม่มีสินค้า",
+    "is_correct": false,
+    "confidence": 0.0
   },
   "S11": {
-    "status": true,
-    "detected": "Vitamin Drink",
-    "is_correct": true,
-    "confidence": 0.4
+    "status": false,
+    "detected": "ไม่มีสินค้า",
+    "is_correct": false,
+    "confidence": 0.0
   },
-  "last_update": "2026-04-20T00:35:06.085237"
+  "last_update": "2026-04-20T00:46:44.870862"
 }
