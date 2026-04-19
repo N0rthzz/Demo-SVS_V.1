@@ -199,15 +199,16 @@ def analyze_shelf_image_advanced(img_array, conf_threshold=0.25):
     # ตรวจจับแบบ Ensemble
     detection_boxes = detect_with_ensemble(img_array, conf_threshold)
     
-    # ✅ เพิ่มส่วนแสดงผล bounding box บนภาพ (สำหรับ debug)
-    img_debug = img_array.copy()
-    for det in detection_boxes:
-        x1, y1, x2, y2, class_name = det
-        cv2.rectangle(img_debug, (x1, y1), (x2, y2), (255, 0, 0), 2)
-        cv2.putText(img_debug, class_name, (x1, y1-5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,0,0), 2)
-
-    # แสดงภาพ debug ใน sidebar
-    st.sidebar.image(img_debug, caption="Bounding Box ที่ตรวจจับได้", use_container_width=True)
+    # ========== เพิ่มส่วนนี้ ==========
+    # แสดงผลการตรวจจับทั้งหมดใน sidebar
+    st.sidebar.markdown("### 🔍 ผลการตรวจจับของโมเดล")
+    if detection_boxes:
+        for det in detection_boxes:
+            x1, y1, x2, y2, class_name = det
+            st.sidebar.write(f"- {class_name} : ตำแหน่ง ({x1},{y1}) -> ({x2},{y2})")
+    else:
+        st.sidebar.warning("ไม่พบสินค้าใดๆ ลองลด Confidence threshold")
+    # =================================
 
     # แสดง log การตรวจจับ
     detected_classes = list(set([det[4] for det in detection_boxes]))
@@ -251,6 +252,39 @@ def analyze_shelf_image_advanced(img_array, conf_threshold=0.25):
             empty_slots.append(slot["name"])
     
     return slot_statuses, empty_slots, detection_boxes
+
+def analyze_with_majority_voting(img_array, conf_threshold=0.25, num_trials=3):
+    """ตรวจจับหลายครั้งแล้วใช้ผลที่ซ้ำกันมากที่สุด"""
+    all_results = []
+    
+    for _ in range(num_trials):
+        # หมุนภาพเล็กน้อยเพื่อความหลากหลาย
+        h, w = img_array.shape[:2]
+        M = cv2.getRotationMatrix2D((w/2, h/2), np.random.uniform(-2, 2), 1)
+        img_rotated = cv2.warpAffine(img_array, M, (w, h))
+        
+        slot_statuses, empty_slots, _ = analyze_shelf_image_advanced(img_rotated, conf_threshold)
+        all_results.append(slot_statuses)
+    
+    # ใช้ Majority Voting
+    final_statuses = []
+    for i in range(len(all_results[0])):
+        votes_status = [r[i]["status"] for r in all_results]
+        votes_detected = [r[i]["detected"] for r in all_results if r[i]["detected"] != "ไม่มีสินค้า"]
+        
+        # เลือกผลที่เกิดบ่อยที่สุด
+        from collections import Counter
+        final_status = Counter(votes_status).most_common(1)[0][0]
+        final_detected = Counter(votes_detected).most_common(1)[0][0] if votes_detected else "ไม่มีสินค้า"
+        
+        final_statuses.append({
+            **all_results[0][i],
+            "status": final_status,
+            "detected": final_detected,
+            "is_correct": final_status and final_detected == all_results[0][i]["name"]
+        })
+    
+    return final_statuses, [], []
 
 def draw_grid_on_image_advanced(img_array, slot_statuses, show_labels=True):
     """วาดกรอบพร้อมแสดง Confidence Score"""

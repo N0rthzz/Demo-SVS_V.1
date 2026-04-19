@@ -6,10 +6,10 @@
     "confidence": 0.0
   },
   "S02": {
-    "status": true,
-    "detected": "Coconut Water Carton",
-    "is_correct": true,
-    "confidence": 0.6652905576811274
+    "status": false,
+    "detected": "ไม่มีสินค้า",
+    "is_correct": false,
+    "confidence": 0.0
   },
   "S03": {
     "status": false,
@@ -30,10 +30,10 @@
     "confidence": 0.0
   },
   "S06": {
-    "status": false,
-    "detected": "ไม่มีสินค้า",
+    "status": true,
+    "detected": "Energy Drink",
     "is_correct": false,
-    "confidence": 0.0
+    "confidence": 0.6618265270169625
   },
   "S07": {
     "status": false,
@@ -48,10 +48,10 @@
     "confidence": 0.0
   },
   "S09": {
-    "status": true,
-    "detected": "Soda Can",
-    "is_correct": true,
-    "confidence": 0.3436778451577725
+    "status": false,
+    "detected": "ไม่มีสินค้า",
+    "is_correct": false,
+    "confidence": 0.0
   },
   "S10": {
     "status": false,
@@ -71,5 +71,5 @@
     "is_correct": false,
     "confidence": 0.0
   },
-  "last_update": "2026-04-20T00:03:24.414224"
+  "last_update": "2026-04-20T00:07:35.432094"
 }
