@@ -36,10 +36,10 @@
     "confidence": 0.0
   },
   "S07": {
-    "status": false,
-    "detected": "ไม่มีสินค้า",
+    "status": true,
+    "detected": "Soda Can",
     "is_correct": false,
-    "confidence": 0.0
+    "confidence": 0.711463490692581
   },
   "S08": {
     "status": false,
@@ -54,10 +54,10 @@
     "confidence": 0.0
   },
   "S10": {
-    "status": false,
-    "detected": "ไม่มีสินค้า",
+    "status": true,
+    "detected": "Soda Can",
     "is_correct": false,
-    "confidence": 0.0
+    "confidence": 0.737621103681319
   },
   "S11": {
     "status": false,
@@ -65,5 +65,5 @@
     "is_correct": false,
     "confidence": 0.0
   },
-  "last_update": "2026-04-20T00:46:44.870862"
+  "last_update": "2026-04-20T00:49:58.467228"
 }

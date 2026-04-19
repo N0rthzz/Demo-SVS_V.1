@@ -1,0 +1,60 @@
+{
+  "slots": [
+    {
+      "id": "S01",
+      "name": "Canned tea",
+      "status": false
+    },
+    {
+      "id": "S02",
+      "name": "Coconut Water Carton",
+      "status": false
+    },
+    {
+      "id": "S03",
+      "name": "Coffee Can",
+      "status": false
+    },
+    {
+      "id": "S04",
+      "name": "Drinking water",
+      "status": false
+    },
+    {
+      "id": "S05",
+      "name": "Energy Drink",
+      "status": false
+    },
+    {
+      "id": "S06",
+      "name": "Green Tea Bottle",
+      "status": false
+    },
+    {
+      "id": "S07",
+      "name": "Juice Box",
+      "status": false
+    },
+    {
+      "id": "S08",
+      "name": "Protein Drink",
+      "status": false
+    },
+    {
+      "id": "S09",
+      "name": "Soda Can",
+      "status": false
+    },
+    {
+      "id": "S10",
+      "name": "UHT milk carton",
+      "status": false
+    },
+    {
+      "id": "S11",
+      "name": "Vitamin Drink",
+      "status": false
+    }
+  ],
+  "last_update": "2026-04-20T00:49:36.114528"
+}
