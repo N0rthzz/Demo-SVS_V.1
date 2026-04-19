@@ -43,17 +43,31 @@ def rel_to_abs(rel_bbox, img_w, img_h):
     return [int(rel_bbox[0]*img_w), int(rel_bbox[1]*img_h),
             int(rel_bbox[2]*img_w), int(rel_bbox[3]*img_h)]
 
-def check_slot_occupancy(detection_boxes, slot_abs_bbox, iou_thresh=0.05):
+def check_slot_occupancy(detection_boxes, slot_abs_bbox, iou_thresh=0.15):  # เพิ่ม threshold
     sx1, sy1, sx2, sy2 = slot_abs_bbox
     slot_area = max(1, (sx2-sx1)*(sy2-sy1))
+    best_iou = 0
     for (dx1, dy1, dx2, dy2) in detection_boxes:
-        ix1, iy1 = max(sx1, dx1), max(sy1, dy1)
-        ix2, iy2 = min(sx2, dx2), min(sy2, dy2)
+        ix1 = max(sx1, dx1)
+        iy1 = max(sy1, dy1)
+        ix2 = min(sx2, dx2)
+        iy2 = min(sy2, dy2)
         if ix2 > ix1 and iy2 > iy1:
             inter_area = (ix2-ix1)*(iy2-iy1)
-            if inter_area / slot_area > iou_thresh:
-                return True
-    return False
+            iou = inter_area / slot_area
+            if iou > best_iou:
+                best_iou = iou
+    return best_iou > iou_thresh
+
+def get_slot_status_with_evidence(slot_statuses, product_boxes, img_shape):
+    for slot in slot_statuses:
+        occupied = False
+        for box in product_boxes:
+            if check_slot_occupancy([box], slot["bbox"], iou_thresh=0.2):
+                occupied = True
+                break
+        slot["status"] = occupied
+    return slot_statuses
 
 def analyze_image(img_array, conf_threshold=0.25):
     results = model(img_array, conf=conf_threshold)
