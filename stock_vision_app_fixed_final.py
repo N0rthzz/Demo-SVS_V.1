@@ -318,50 +318,70 @@ def save_upload_history(image_array, filename):
     """บันทึกประวัติการอัปโหลด"""
     history = []
     if os.path.exists(UPLOAD_HISTORY_FILE):
-        with open(UPLOAD_HISTORY_FILE, "r", encoding="utf-8") as f:
-            history = json.load(f)
+        try:
+            with open(UPLOAD_HISTORY_FILE, "r", encoding="utf-8") as f:
+                history = json.load(f)
+        except:
+            history = []
     
-    # แปลงภาพเป็น base64 เพื่อเก็บ
-    _, buffer = cv2.imencode('.jpg', cv2.cvtColor(image_array, cv2.COLOR_RGB2BGR))
+    # แปลงภาพเป็น base64
     import base64
+    _, buffer = cv2.imencode('.jpg', cv2.cvtColor(image_array, cv2.COLOR_RGB2BGR))
     image_base64 = base64.b64encode(buffer).decode('utf-8')
     
     history.insert(0, {
         "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "filename": filename,
-        "image_base64": image_base64
+        "filename": str(filename),
+        "image_base64": str(image_base64)
     })
     
     # เก็บแค่ 10 ภาพล่าสุด
     history = history[:10]
     
-    with open(UPLOAD_HISTORY_FILE, "w", encoding="utf-8") as f:
-        json.dump(history, f, indent=2, ensure_ascii=False)
+    try:
+        with open(UPLOAD_HISTORY_FILE, "w", encoding="utf-8") as f:
+            json.dump(history, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        st.warning(f"ไม่สามารถบันทึกประวัติภาพได้: {e}")
 
 def load_upload_history():
     """โหลดประวัติการอัปโหลด"""
     if os.path.exists(UPLOAD_HISTORY_FILE):
-        with open(UPLOAD_HISTORY_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
+        try:
+            with open(UPLOAD_HISTORY_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, IOError):
+            return []
     return []
 
 def save_stock_history(slot_statuses):
+    """บันทึกประวัติสถานะสินค้า (แก้ไข JSON serializable)"""
     history = {}
     for slot in slot_statuses:
+        # แปลงค่าให้เป็น JSON serializable ทั้งหมด
         history[slot["id"]] = {
-            "status": slot["status"],
-            "detected": slot["detected"],
-            "is_correct": slot["is_correct"]
+            "status": bool(slot["status"]),  # แปลงเป็น bool ที่ JSON รองรับ
+            "detected": str(slot["detected"]),  # แปลงเป็น string
+            "is_correct": bool(slot["is_correct"]),  # แปลงเป็น bool
+            "confidence": float(slot.get("confidence", 0))  # แปลงเป็น float
         }
     history["last_update"] = datetime.now().isoformat()
     
-    with open(HISTORY_FILE, "w", encoding="utf-8") as f:
-        json.dump(history, f, indent=2, ensure_ascii=False)
+    # เขียนไฟล์อย่างปลอดภัย
+    try:
+        with open(HISTORY_FILE, "w", encoding="utf-8") as f:
+            json.dump(history, f, indent=2, ensure_ascii=False, default=str)
+    except Exception as e:
+        st.error(f"ไม่สามารถบันทึกประวัติได้: {e}")
 
 def load_stock_history():
+    """โหลดประวัติสถานะสินค้า"""
     if os.path.exists(HISTORY_FILE):
-        with open(HISTORY_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
+        try:
+            with open(HISTORY_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except:
+            return {}
     return {}
 
 def check_stock_changes(current_statuses, previous_history):

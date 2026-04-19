@@ -1,0 +1,13 @@
+{
+  "S01": {
+    "status": false,
+    "detected": "ไม่มีสินค้า",
+    "is_correct": false
+  },
+  "S02": {
+    "status": false,
+    "detected": "ไม่มีสินค้า",
+    "is_correct": false
+  },
+  "S03": {
+    "status": 
