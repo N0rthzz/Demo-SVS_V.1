@@ -1,17 +1,15 @@
-# stock_vision_app_final_hybrid.py
+# stock_vision_app_history_mode.py
 import streamlit as st
 from ultralytics import YOLO
 import cv2
 import numpy as np
 from PIL import Image
-import pandas as pd
-from datetime import datetime
 import os
+import uuid  # ใช้สำหรับสร้าง ID เฉพาะให้แต่ละภาพเพื่อการลบ
 
 # ------------------- ตั้งค่า page config -------------------
-st.set_page_config(page_title="Stock Vision System - Hybrid Mode", layout="wide")
+st.set_page_config(page_title="Stock Vision - History Mode", layout="wide")
 
-# ------------------- โหลดโมเดล -------------------
 @st.cache_resource
 def load_model():
     base_path = os.path.dirname(os.path.abspath(__file__))
@@ -22,101 +20,101 @@ def load_model():
 
 model = load_model()
 
-CLASS_NAMES = [
-    "Canned tea", "Coconut Water Carton", "Coffee Can", "Drinking water",
-    "Empty_Stock", "Energy Drink", "Green Tea Bottle", "Juice Box",
-    "Protein Drink", "Soda Can", "UHT milk carton", "Vitamin Drink"
-]
-
-# รายชื่อสินค้า 11 ชนิดสำหรับ Dashboard
 PRODUCT_LIST = [
-    {"id": "S01", "name": "Canned tea"},
-    {"id": "S02", "name": "Coconut Water Carton"},
-    {"id": "S03", "name": "Coffee Can"},
-    {"id": "S04", "name": "Drinking water"},
-    {"id": "S05", "name": "Energy Drink"},
-    {"id": "S06", "name": "Green Tea Bottle"},
-    {"id": "S07", "name": "Juice Box"},
-    {"id": "S08", "name": "Protein Drink"},
-    {"id": "S09", "name": "Soda Can"},
-    {"id": "S10", "name": "UHT milk carton"},
+    {"id": "S01", "name": "Canned tea"}, {"id": "S02", "name": "Coconut Water Carton"},
+    {"id": "S03", "name": "Coffee Can"}, {"id": "S04", "name": "Drinking water"},
+    {"id": "S05", "name": "Energy Drink"}, {"id": "S06", "name": "Green Tea Bottle"},
+    {"id": "S07", "name": "Juice Box"}, {"id": "S08", "name": "Protein Drink"},
+    {"id": "S09", "name": "Soda Can"}, {"id": "S10", "name": "UHT milk carton"},
     {"id": "S11", "name": "Vitamin Drink"}
 ]
 
-# ------------------- Logic การวิเคราะห์เบื้องหลัง -------------------
-def get_detected_items(img_array, conf_threshold):
-    if model is None:
-        return set()
-    
-    results = model(img_array, conf=conf_threshold)
+# ------------------- เตรียม Session State -------------------
+if 'image_history' not in st.session_state:
+    st.session_state.image_history = []  # เก็บลิสต์ของ dict {id, image, found_items}
+
+# ------------------- ฟังก์ชันจัดการข้อมูล -------------------
+def process_new_image(img_file):
+    img = Image.open(img_file).convert("RGB")
+    arr = np.array(img)
     found_items = set()
     
-    if results[0].boxes is not None:
-        for box in results[0].boxes:
-            cls_id = int(box.cls[0])
-            label = results[0].names[cls_id]
-            if label != "Empty_Stock":
-                found_items.add(label)
-    return found_items
-
-# ------------------- UI ส่วน Dashboard -------------------
-def show_status_dashboard(found_items):
-    st.subheader("📊 รายงานสถานะสินค้า (Shelf Status)")
-    cols = st.columns(4)
+    if model:
+        results = model(arr, conf=confidence_threshold)
+        if results[0].boxes is not None:
+            for box in results[0].boxes:
+                label = results[0].names[int(box.cls[0])]
+                if label != "Empty_Stock":
+                    found_items.add(label)
     
-    for idx, item in enumerate(PRODUCT_LIST):
-        is_active = item["name"] in found_items
-        with cols[idx % 4]:
-            bg_color = "#28a745" if is_active else "#dc3545" # เขียวถ้าเจอ / แดงถ้าไม่เจอ
-            st.markdown(f"""
-                <div style="background-color:{bg_color}; color:white; padding:15px; border-radius:10px; text-align:center; margin-bottom:10px;">
-                    <div style="font-size:12px; opacity:0.8;">{item['id']}</div>
-                    <b style="font-size:16px;">{item['name']}</b><br>
-                    <span style="font-size:12px;">{'● ตรวจพบ' if is_active else '○ ไม่พบสินค้า'}</span>
-                </div>
-            """, unsafe_allow_html=True)
+    # เพิ่มลงในประวัติพร้อม ID สุ่มสำหรับการลบ
+    st.session_state.image_history.append({
+        "id": str(uuid.uuid4()),
+        "image": img,
+        "found": found_items,
+        "time": datetime.now().strftime("%H:%M:%S")
+    })
 
-# ------------------- UI หลัก -------------------
-st.title("📦 Stock Vision Monitoring")
-st.markdown("ระบบจะวิเคราะห์รูปภาพและอัปเดตสถานะในตาราง 11 ช่องโดยอัตโนมัติ")
+def delete_image(img_id):
+    st.session_state.image_history = [item for item in st.session_state.image_history if item["id"] != img_id]
 
+# ------------------- UI Sidebar -------------------
 with st.sidebar:
-    st.header("⚙️ การตั้งค่า")
-    confidence_threshold = st.slider("AI Confidence", 0.0, 1.0, 0.25, 0.01)
-    display_width = st.select_slider("ขนาดภาพแสดงผล", options=[400, 600, 800], value=600)
-    st.info("โหมดปัจจุบัน: Clean View (ไม่แสดงกรอบทับรูป)")
+    st.title("⚙️ Control Panel")
+    confidence_threshold = st.slider("AI Confidence", 0.0, 1.0, 0.25)
+    if st.button("🗑️ ล้างภาพทั้งหมด", use_container_width=True):
+        st.session_state.image_history = []
+        st.rerun()
 
-mode = st.radio("โหมดการทำงาน", ["📸 อัปโหลดภาพ", "📷 ถ่ายภาพจากกล้อง"])
+st.title("📦 Stock Vision - Multi-Image History")
 
-source_img = None
+# ------------------- ส่วน Input -------------------
+mode = st.radio("เลือกแหล่งที่มาภาพ", ["📸 อัปโหลดภาพ", "📷 ถ่ายภาพจากกล้อง"], horizontal=True)
 if mode == "📸 อัปโหลดภาพ":
-    source_img = st.file_uploader("เลือกภาพชั้นวางสินค้า", type=["jpg","jpeg","png"])
+    up_file = st.file_uploader("เพิ่มภาพใหม่เข้าสู่ระบบ", type=["jpg","png","jpeg"], key="uploader")
+    if up_file:
+        process_new_image(up_file)
+        # เคลียร์ค่า uploader เพื่อให้พร้อมรับภาพต่อไป (ต้องอาศัยเทคนิค rerun)
 else:
-    source_img = st.camera_input("ถ่ายภาพสินค้า")
+    cam_file = st.camera_input("ถ่ายภาพใหม่")
+    if cam_file:
+        process_new_image(cam_file)
 
-# ส่วนประมวลผลเมื่อมีการส่งรูปเข้ามาร
-if source_img:
-    img = Image.open(source_img).convert("RGB")
-    arr = np.array(img)
-    
-    # 1. แสดงรูปต้นฉบับแบบ Clean (ไม่มีกรอบ AI ทับ)
-    st.image(img, caption="รูปภาพที่อัปโหลด", width=display_width)
-    
-    # 2. ให้ AI วิเคราะห์ชื่อสินค้าเบื้องหลัง
-    with st.spinner('AI กำลังวิเคราะห์สินค้า...'):
-        found_items = get_detected_items(arr, confidence_threshold)
-    
-    # 3. แสดง Dashboard สถานะ
-    st.divider()
-    show_status_dashboard(found_items)
-    
-    # แจ้งเตือนสรุป
-    missing = [p['name'] for p in PRODUCT_LIST if p['name'] not in found_items]
-    if missing:
-        st.warning(f"⚠️ สินค้าที่หายไป: {', '.join(missing)}")
-    else:
-        st.success("✅ สินค้าครบถ้วนตามรายการ")
+# ------------------- คำนวณสถานะรวมจากทุกภาพ -------------------
+all_found_items = set()
+for item in st.session_state.image_history:
+    all_found_items.update(item["found"])
 
-# ส่วนรายงานประวัติ (ถ้าต้องการเก็บไว้)
-# if 'alert_history' not in st.session_state:
-#     st.session_state.alert_history = []
+# ------------------- แสดง Dashboard (สถานะรวม) -------------------
+st.divider()
+st.subheader("📊 สถานะสต็อกรวม (จากภาพทั้งหมดที่เก็บไว้)")
+dash_cols = st.columns(6)
+for idx, p in enumerate(PRODUCT_LIST):
+    is_active = p["name"] in all_found_items
+    with dash_cols[idx % 6]:
+        color = "#28a745" if is_active else "#dc3545"
+        st.markdown(f"""
+            <div style="background-color:{color}; color:white; padding:10px; border-radius:8px; text-align:center; font-size:13px; margin-bottom:5px;">
+                <b>{p['id']}</b><br>{p['name']}
+            </div>
+        """, unsafe_allow_html=True)
+
+# ------------------- ส่วนแสดงประวัติภาพ (Image History) -------------------
+st.divider()
+st.subheader("🖼️ ประวัติภาพถ่าย")
+if not st.session_state.image_history:
+    st.info("ยังไม่มีข้อมูลภาพในระบบ")
+else:
+    # แสดงภาพเรียงจากใหม่ไปเก่า
+    for item in reversed(st.session_state.image_history):
+        with st.container():
+            col_img, col_info = st.columns([1, 2])
+            with col_img:
+                st.image(item["image"], use_container_width=True)
+            with col_info:
+                st.write(f"🕒 **เวลา:** {item['time']}")
+                st.write(f"🔎 **สินค้าที่พบ:** {', '.join(item['found']) if item['found'] else 'ไม่พบ'}")
+                if st.button(f"🗑️ ลบภาพนี้", key=item["id"]):
+                    delete_image(item["id"])
+                    st.rerun()
+            st.markdown("---")
