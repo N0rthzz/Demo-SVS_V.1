@@ -12,10 +12,10 @@
     "confidence": 0.0
   },
   "S03": {
-    "status": false,
-    "detected": "ไม่มีสินค้า",
-    "is_correct": false,
-    "confidence": 0.0
+    "status": true,
+    "detected": "Coffee Can",
+    "is_correct": true,
+    "confidence": 0.2588757396449704
   },
   "S04": {
     "status": false,
@@ -24,28 +24,28 @@
     "confidence": 0.0
   },
   "S05": {
-    "status": false,
-    "detected": "ไม่มีสินค้า",
+    "status": true,
+    "detected": "Coffee Can",
     "is_correct": false,
-    "confidence": 0.0
+    "confidence": 0.6336722625883426
   },
   "S06": {
     "status": true,
-    "detected": "Green Tea Bottle",
-    "is_correct": true,
-    "confidence": 0.31878501197670794
+    "detected": "Coffee Can",
+    "is_correct": false,
+    "confidence": 0.8163687316897069
   },
   "S07": {
     "status": true,
-    "detected": "Green Tea Bottle",
+    "detected": "Coffee Can",
     "is_correct": false,
-    "confidence": 0.5968008936916428
+    "confidence": 0.7822704408893537
   },
   "S08": {
-    "status": false,
-    "detected": "ไม่มีสินค้า",
+    "status": true,
+    "detected": "Coffee Can",
     "is_correct": false,
-    "confidence": 0.0
+    "confidence": 0.6281441541120055
   },
   "S09": {
     "status": false,
@@ -54,10 +54,10 @@
     "confidence": 0.0
   },
   "S10": {
-    "status": true,
-    "detected": "UHT milk carton",
-    "is_correct": true,
-    "confidence": 0.7781491100728682
+    "status": false,
+    "detected": "ไม่มีสินค้า",
+    "is_correct": false,
+    "confidence": 0.0
   },
   "S11": {
     "status": false,
@@ -65,5 +65,5 @@
     "is_correct": false,
     "confidence": 0.0
   },
-  "last_update": "2026-04-20T00:15:35.762847"
+  "last_update": "2026-04-20T00:24:30.958084"
 }

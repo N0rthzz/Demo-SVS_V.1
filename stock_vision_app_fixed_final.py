@@ -13,7 +13,7 @@ import base64
 import random
 
 # ------------------- ตั้งค่า page config -------------------
-st.set_page_config(page_title="🥤 Smart Vending Stock Monitor Pro", layout="wide")
+st.set_page_config(page_title="🥤 Stock Vision System APP", layout="wide")
 
 # ------------------- โหลดโมเดล -------------------
 @st.cache_resource
@@ -29,7 +29,7 @@ CLASS_NAMES = [
     "Protein Drink", "Soda Can", "UHT milk carton", "Vitamin Drink"
 ]
 
-# สร้าง映射ชื่อสินค้าไทย-อังกฤษ
+# ชื่อสินค้าภาษาไทย
 THAI_NAMES = {
     "Canned tea": "ชากระป๋อง",
     "Coconut Water Carton": "น้ำมะพร้าวกล่อง",
@@ -63,6 +63,7 @@ SLOT_RELATIVE_BOXES = [
 HISTORY_FILE = "stock_history.json"
 UPLOAD_HISTORY_FILE = "upload_history.json"
 VALIDATION_HISTORY_FILE = "validation_history.json"
+SIMULATION_FILE = "simulation_state.json"
 
 # ==================== ฟังก์ชันสำหรับทดสอบความแม่นยำ ====================
 def predict_single_product(img_array, conf_threshold=0.25):
@@ -85,7 +86,36 @@ def predict_single_product(img_array, conf_threshold=0.25):
                     "bbox": [x1, y1, x2, y2]
                 })
     
-    # เรียงตามความมั่นใจ
+    predictions.sort(key=lambda x: x["confidence"], reverse=True)
+    return predictions
+
+def predict_all_categories(img_array, conf_threshold=0.25):
+    """ทำนายทุกประเภทสินค้า 11 ชนิด พร้อมความมั่นใจ"""
+    results = model(img_array, conf=conf_threshold)
+    
+    # สร้าง dictionary สำหรับเก็บความมั่นใจของแต่ละคลาส
+    category_scores = {name: 0.0 for name in CLASS_NAMES if name != "Empty_Stock"}
+    
+    if results[0].boxes is not None:
+        for box in results[0].boxes:
+            cls_id = int(box.cls[0])
+            class_name = CLASS_NAMES[cls_id]
+            confidence = float(box.conf[0])
+            
+            if class_name != "Empty_Stock" and confidence >= conf_threshold:
+                if confidence > category_scores[class_name]:
+                    category_scores[class_name] = confidence
+    
+    # แปลงเป็นลิสต์เรียงตามความมั่นใจ
+    predictions = []
+    for name, score in category_scores.items():
+        predictions.append({
+            "class_name": name,
+            "thai_name": THAI_NAMES.get(name, name),
+            "confidence": score,
+            "has_product": score > 0
+        })
+    
     predictions.sort(key=lambda x: x["confidence"], reverse=True)
     return predictions
 
@@ -97,16 +127,15 @@ def draw_prediction_on_image(img_array, predictions):
     colors = [(0, 255, 0), (255, 165, 0), (0, 255, 255), (255, 0, 255), (0, 165, 255)]
     
     for i, pred in enumerate(predictions):
+        if "bbox" not in pred:
+            continue
         x1, y1, x2, y2 = pred["bbox"]
         color = colors[i % len(colors)]
         
-        # วาดกรอบ
         cv2.rectangle(img_draw, (x1, y1), (x2, y2), color, 3)
         
-        # ข้อความ
         label = f"{pred['thai_name']} ({pred['confidence']:.1%})"
         
-        # พื้นหลังข้อความ
         font = cv2.FONT_HERSHEY_SIMPLEX
         font_scale = 0.6
         (text_w, text_h), _ = cv2.getTextSize(label, font, font_scale, 2)
@@ -131,11 +160,9 @@ def save_validation_result(image_array, filename, predictions, actual_label=None
         except:
             history = []
     
-    # แปลงภาพเป็น base64
     _, buffer = cv2.imencode('.jpg', cv2.cvtColor(image_array, cv2.COLOR_RGB2BGR))
     image_base64 = base64.b64encode(buffer).decode('utf-8')
     
-    # เตรียมข้อมูล
     top_prediction = predictions[0] if predictions else None
     
     history.insert(0, {
@@ -154,7 +181,6 @@ def save_validation_result(image_array, filename, predictions, actual_label=None
         "actual_label": actual_label
     })
     
-    # เก็บแค่ 20 รายการล่าสุด
     history = history[:20]
     
     try:
@@ -181,12 +207,17 @@ def calculate_model_accuracy():
     
     total = 0
     correct = 0
+    category_stats = {name: {"total": 0, "correct": 0} for name in CLASS_NAMES if name != "Empty_Stock"}
     
     for record in history:
         if record.get("actual_label") and record.get("top_prediction"):
             total += 1
             if record["actual_label"] == record["top_prediction"]:
                 correct += 1
+                if record["actual_label"] in category_stats:
+                    category_stats[record["actual_label"]]["correct"] += 1
+            if record["actual_label"] in category_stats:
+                category_stats[record["actual_label"]]["total"] += 1
     
     if total == 0:
         return None
@@ -195,10 +226,50 @@ def calculate_model_accuracy():
         "accuracy": correct / total,
         "total_tests": total,
         "correct": correct,
-        "wrong": total - correct
+        "wrong": total - correct,
+        "category_stats": category_stats
     }
 
-# ==================== ฟังก์ชันหลัก (เดิม) ====================
+# ==================== ฟังก์ชัน Simulation Mode ====================
+def save_simulation_state(slot_statuses):
+    """บันทึกสถานะ Simulation"""
+    state = []
+    for slot in slot_statuses:
+        state.append({
+            "id": slot["id"],
+            "name": slot["name"],
+            "status": slot["status"]
+        })
+    state["last_update"] = datetime.now().isoformat()
+    
+    try:
+        with open(SIMULATION_FILE, "w", encoding="utf-8") as f:
+            json.dump(state, f, indent=2, ensure_ascii=False, default=str)
+    except Exception as e:
+        pass
+
+def load_simulation_state():
+    """โหลดสถานะ Simulation"""
+    if os.path.exists(SIMULATION_FILE):
+        try:
+            with open(SIMULATION_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except:
+            return None
+    return None
+
+def get_default_simulation_slots():
+    """สร้างสถานะเริ่มต้นสำหรับ Simulation (มีสินค้าทุกช่อง)"""
+    slots = []
+    for slot in SLOT_RELATIVE_BOXES:
+        slots.append({
+            "id": slot["id"],
+            "name": slot["name"],
+            "status": True  # มีสินค้าทุกช่องเริ่มต้น
+        })
+    return slots
+
+# ==================== ฟังก์ชันหลัก ====================
 def rel_to_abs(rel_bbox, img_w, img_h):
     x1 = int(rel_bbox[0] * img_w)
     y1 = int(rel_bbox[1] * img_h)
@@ -586,15 +657,19 @@ def show_dashboard(slot_statuses):
     else:
         st.info("ไม่มีการแจ้งเตือน")
 
-# ==================== UI หลัก ====================
+# ------------------- UI หลัก -------------------
 st.title("🥤 Smart Vending Stock Monitor Pro")
-st.markdown("**ระบบตรวจจับสินค้าหมดอัจฉริยะ | รองรับการทดสอบความแม่นยำโมเดล**")
+st.markdown("**ระบบตรวจจับสินค้าหมดอัจฉริยะ | ทดสอบความแม่นยำ | โหมดจำลองสถานการณ์**")
 
 # เลือกโหมดหลัก
-main_mode = st.radio("เลือกโหมดหลัก", ["📦 ตรวจสอบสต็อกสินค้า", "🎯 ทดสอบความแม่นยำโมเดล"], horizontal=True)
+main_mode = st.radio(
+    "เลือกโหมดหลัก", 
+    ["📦 ตรวจสอบสต็อกสินค้า", "🎯 ทดสอบความแม่นยำโมเดล", "🎮 Simulation Mode"], 
+    horizontal=True
+)
 
+# ==================== โหมด 1: ตรวจสอบสต็อกสินค้า ====================
 if main_mode == "📦 ตรวจสอบสต็อกสินค้า":
-    # ------------------- โหมดตรวจสอบสต็อก -------------------
     with st.sidebar:
         st.header("⚙️ การตั้งค่า")
         confidence_threshold = st.slider("Confidence threshold", 0.0, 1.0, 0.20, 0.01)
@@ -702,13 +777,12 @@ if main_mode == "📦 ตรวจสอบสต็อกสินค้า":
             else:
                 st.info("📷 กดปุ่มกล้องเพื่อถ่ายภาพ")
 
-else:
-    # ==================== โหมดทดสอบความแม่นยำโมเดล ====================
+# ==================== โหมด 2: ทดสอบความแม่นยำโมเดล ====================
+elif main_mode == "🎯 ทดสอบความแม่นยำโมเดล":
     st.markdown("---")
-    st.subheader("🎯 ทดสอบความแม่นยำของโมเดล")
-    st.markdown("อัปโหลดภาพสินค้า แล้วระบบจะทำนายว่าคือสินค้าชนิดไหน พร้อมแสดงความมั่นใจ")
+    st.subheader("🎯 ทดสอบความแม่นยำของโมเดล (11 ประเภท)")
+    st.markdown("อัปโหลดภาพสินค้า แล้วระบบจะทำนายว่าเป็นสินค้าชนิดไหนใน 11 ประเภท พร้อมแสดงความมั่นใจ")
     
-    # Sidebar สำหรับโหมดทดสอบ
     with st.sidebar:
         st.header("🎯 การทดสอบโมเดล")
         val_confidence = st.slider("Confidence threshold (ทดสอบ)", 0.0, 1.0, 0.20, 0.01)
@@ -722,6 +796,12 @@ else:
             col_a, col_b = st.columns(2)
             col_a.metric("ถูกต้อง", accuracy_stats['correct'])
             col_b.metric("ผิดพลาด", accuracy_stats['wrong'])
+            
+            with st.expander("ดูสถิติแยกตามประเภท"):
+                for cat, stats in accuracy_stats['category_stats'].items():
+                    if stats['total'] > 0:
+                        acc = stats['correct'] / stats['total']
+                        st.write(f"- {THAI_NAMES.get(cat, cat)}: {acc:.1%} ({stats['correct']}/{stats['total']})")
         else:
             st.info("ยังไม่มีข้อมูลการทดสอบ")
         
@@ -744,10 +824,10 @@ else:
             
             st.image(img_array, caption="ภาพที่อัปโหลด", use_container_width=True)
             
-            # เลือกป้ายกำกับจริง (สำหรับวัด accuracy)
+            # เลือกป้ายกำกับจริง
             st.subheader("🏷️ ป้ายกำกับจริง (สำหรับวัดความแม่นยำ)")
             actual_label = st.selectbox(
-                "เลือกว่าภาพนี้คือสินค้าอะไร (ไม่เลือกก็ได้)",
+                "เลือกว่าภาพนี้คือสินค้าอะไร",
                 ["(ไม่ระบุ)"] + CLASS_NAMES,
                 index=0
             )
@@ -755,5 +835,255 @@ else:
             
             with st.spinner("กำลังทำนาย..."):
                 predictions = predict_single_product(img_array, val_confidence)
+                all_categories = predict_all_categories(img_array, val_confidence)
             
-            # แสดงภาพพร้อมกรอบทำนาย
+            # แสดงภาพพร้อมกรอบ
+            if predictions:
+                img_with_pred = draw_prediction_on_image(img_array, predictions)
+                st.image(img_with_pred, caption="ผลการทำนาย (มีกรอบ)", use_container_width=True)
+            else:
+                st.warning("ไม่พบสินค้าในภาพ")
+            
+            # บันทึกผล
+            if st.button("💾 บันทึกผลการทดสอบ"):
+                save_validation_result(img_array, test_file.name, predictions, actual_label)
+                st.success("บันทึกผลเรียบร้อย!")
+            
+            with col_test_right:
+                st.subheader("📊 ผลการทำนายทั้ง 11 ประเภท")
+                
+                # แสดงตารางความมั่นใจของทุกประเภท
+                df_data = []
+                for cat in all_categories:
+                    if cat["has_product"]:
+                        status = f"✅ พบ (ความมั่นใจ {cat['confidence']:.1%})"
+                        color = "green"
+                    else:
+                        status = "❌ ไม่พบ"
+                        color = "red"
+                    
+                    df_data.append({
+                        "ประเภทสินค้า": cat["thai_name"],
+                        "ชื่ออังกฤษ": cat["class_name"],
+                        "ผลการตรวจจับ": status,
+                        "ความมั่นใจ": f"{cat['confidence']:.1%}" if cat["confidence"] > 0 else "-"
+                    })
+                
+                df = pd.DataFrame(df_data)
+                st.dataframe(df, use_container_width=True, height=500)
+                
+                # แสดงอันดับความมั่นใจสูงสุด
+                st.subheader("🏆 อันดับความมั่นใจสูงสุด")
+                top_predictions = [p for p in all_categories if p["confidence"] > 0][:5]
+                if top_predictions:
+                    for i, p in enumerate(top_predictions):
+                        st.write(f"{i+1}. {p['thai_name']}: {p['confidence']:.1%}")
+                else:
+                    st.info("ไม่พบการตรวจจับ")
+    
+    # แสดงประวัติการทดสอบล่าสุด
+    st.markdown("---")
+    st.subheader("📜 ประวัติการทดสอบล่าสุด")
+    history = load_validation_history()
+    if history:
+        for record in history[:5]:
+            with st.expander(f"📅 {record['time']} - {record['filename']}"):
+                # แสดงภาพขนาดเล็ก
+                img_bytes = base64.b64decode(record['image_base64'])
+                img_array = cv2.imdecode(np.frombuffer(img_bytes, np.uint8), cv2.IMREAD_COLOR)
+                img_rgb = cv2.cvtColor(img_array, cv2.COLOR_BGR2RGB)
+                st.image(img_rgb, width=200)
+                
+                st.write(f"**ผลทำนายสูงสุด:** {record.get('top_prediction', '-')} (ความมั่นใจ {record.get('top_confidence', 0):.1%})")
+                if record.get('actual_label'):
+                    is_correct = record.get('top_prediction') == record.get('actual_label')
+                    st.write(f"**ป้ายกำกับจริง:** {record['actual_label']} {'✅ ถูกต้อง' if is_correct else '❌ ผิดพลาด'}")
+                
+                st.write("**3 อันดับแรก:**")
+                for p in record.get('predictions', [])[:3]:
+                    st.write(f"  - {p['thai_name']}: {p['confidence']:.1%}")
+    else:
+        st.info("ยังไม่มีประวัติการทดสอบ")
+
+# ==================== โหมด 3: Simulation Mode ====================
+else:
+    st.markdown("---")
+    st.subheader("🎮 Simulation Mode - จำลองสถานะสินค้า 11 ช่อง")
+    st.markdown("ปรับสถานะสินค้าในแต่ละช่อง (✅ มีสินค้า / ❌ สินค้าหมด) เพื่อทดสอบระบบแจ้งเตือน")
+    
+    with st.sidebar:
+        st.header("🎮 การตั้งค่า Simulation")
+        if st.button("🔄 รีเซ็ตสถานะทั้งหมด (มีสินค้าทุกช่อง)"):
+            simulation_slots = get_default_simulation_slots()
+            save_simulation_state(simulation_slots)
+            st.success("รีเซ็ตเรียบร้อย!")
+            st.rerun()
+        
+        if st.button("❌ ตั้งค่าสินค้าหมดทุกช่อง"):
+            simulation_slots = get_default_simulation_slots()
+            for slot in simulation_slots:
+                slot["status"] = False
+            save_simulation_state(simulation_slots)
+            st.success("ตั้งค่าสินค้าหมดทุกช่อง!")
+            st.rerun()
+        
+        st.markdown("---")
+        st.info("💡 เลือกสถานะสินค้าในตารางด้านขวา เพื่อจำลองการเพิ่ม/ลดสินค้า")
+    
+    # โหลดหรือสร้างสถานะ Simulation
+    simulation_slots = load_simulation_state()
+    if not simulation_slots:
+        simulation_slots = get_default_simulation_slots()
+        save_simulation_state(simulation_slots)
+    
+    # แสดงสถานะ Simulation เป็นตาราง
+    st.subheader("📊 สถานะสินค้า 11 ช่อง (จำลอง)")
+    
+    # สร้างตารางแบบ Grid 4x3
+    cols = st.columns(4)
+    
+    for idx, slot in enumerate(simulation_slots):
+        col_idx = idx % 4
+        with cols[col_idx]:
+            # สีพื้นหลังตามสถานะ
+            if slot["status"]:
+                bg_color = "#d4edda"  # เขียวอ่อน
+                border_color = "#28a745"
+                status_text = "✅ มีสินค้า"
+                icon = "🟢"
+            else:
+                bg_color = "#f8d7da"  # แดงอ่อน
+                border_color = "#dc3545"
+                status_text = "❌ สินค้าหมด"
+                icon = "🔴"
+            
+            # ปุ่มเปลี่ยนสถานะ
+            new_status = st.button(
+                f"{icon} {slot['id']}: {THAI_NAMES.get(slot['name'], slot['name'])}\n\n{status_text}",
+                key=f"sim_{slot['id']}",
+                use_container_width=True
+            )
+            
+            if new_status:
+                slot["status"] = not slot["status"]
+                save_simulation_state(simulation_slots)
+                st.rerun()
+            
+            # แสดงสถานะปัจจุบัน
+            st.markdown(f"""
+            <div style="background-color:{bg_color}; padding:15px; border-radius:10px; 
+                        border:2px solid {border_color}; text-align:center; margin:5px;">
+                <b>{slot['id']}</b><br>
+                <small>{THAI_NAMES.get(slot['name'], slot['name'])}</small><br>
+                <span style="color:{'green' if slot['status'] else 'red'}; font-weight:bold;">
+                    {status_text}
+                </span>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    # แผนผังแสดงภาพรวม
+    st.markdown("---")
+    st.subheader("🗺️ แผนผังสถานะรวม")
+    
+    total = len(simulation_slots)
+    occupied = sum(1 for s in simulation_slots if s["status"])
+    empty = total - occupied
+    
+    col_a, col_b, col_c = st.columns(3)
+    col_a.metric("🥤 ช่องทั้งหมด", total)
+    col_b.metric("✅ มีสินค้า", occupied, delta=f"+{occupied}" if occupied > 0 else None)
+    col_c.metric("❌ สินค้าหมด", empty, delta=f"-{empty}" if empty > 0 else None)
+    
+    # แสดงแผนผังแบบตาราง 4x3
+    st.markdown("### แผนผังช่องวางสินค้า")
+    
+    # สร้างตาราง 4 แถว 3 คอลัมน์
+    grid_data = []
+    for row in range(4):
+        row_slots = []
+        for col in range(3):
+            idx = row * 3 + col
+            if idx < len(simulation_slots):
+                slot = simulation_slots[idx]
+                row_slots.append(slot)
+            else:
+                row_slots.append(None)
+        grid_data.append(row_slots)
+    
+    # แสดงตาราง HTML
+    html_table = '<table style="width:100%; border-collapse: collapse;">'
+    for row in grid_data:
+        html_table += '<tr>'
+        for slot in row:
+            if slot:
+                color = "#d4edda" if slot["status"] else "#f8d7da"
+                status = "มีสินค้า" if slot["status"] else "หมด"
+                html_table += f'''
+                <td style="border:2px solid #ddd; padding:15px; text-align:center; background-color:{color};">
+                    <b>{slot['id']}</b><br>
+                    <small>{THAI_NAMES.get(slot['name'], slot['name'])}</small><br>
+                    <span style="color:{'green' if slot['status'] else 'red'};">● {status}</span>
+                </td>
+                '''
+            else:
+                html_table += '<td style="border:2px solid #ddd; padding:15px; text-align:center; background-color:#f0f0f0;"></td>'
+        html_table += '</tr>'
+    html_table += '</table>'
+    
+    st.markdown(html_table, unsafe_allow_html=True)
+    
+    # สรุปสินค้าหมด
+    empty_slots = [s for s in simulation_slots if not s["status"]]
+    if empty_slots:
+        st.warning(f"⚠️ สินค้าหมด {len(empty_slots)} ช่อง:")
+        for slot in empty_slots:
+            st.write(f"  • ช่อง {slot['id']}: {THAI_NAMES.get(slot['name'], slot['name'])}")
+    else:
+        st.balloons()
+        st.success("🎉 สินค้าครบทุกช่อง!")
+    
+    # ปุ่มทดสอบการแจ้งเตือน
+    st.markdown("---")
+    st.subheader("🔔 ทดสอบระบบแจ้งเตือน")
+    if st.button("📢 ทดสอบแจ้งเตือนสถานะปัจจุบัน"):
+        empty_names = [THAI_NAMES.get(slot['name'], slot['name']) for slot in empty_slots]
+        if empty_names:
+            for name in empty_names:
+                st.toast(f"⚠️ สินค้าหมด: {name}", icon="🔴")
+        else:
+            st.toast("✅ สินค้าครบทุกช่อง!", icon="🎉")
+        st.success("ทดสอบการแจ้งเตือนเรียบร้อย")
+
+# ------------------- ส่วนท้าย -------------------
+st.markdown("---")
+with st.expander("📄 คู่มือการใช้งาน"):
+    st.markdown("""
+    ### 🥤 Smart Vending Stock Monitor Pro
+    
+    **โหมดการทำงาน:**
+    
+    1. **📦 ตรวจสอบสต็อกสินค้า**
+       - อัปโหลดหรือถ่ายภาพชั้นวางสินค้า
+       - ระบบตรวจจับและแสดงสถานะอัตโนมัติ
+       - แจ้งเตือนเมื่อสินค้าหมดหรือผิดช่อง
+    
+    2. **🎯 ทดสอบความแม่นยำโมเดล**
+       - อัปโหลดภาพสินค้าเดี่ยว
+       - ระบบทำนายว่าเป็นสินค้าชนิดไหนใน 11 ประเภท
+       - แสดงความมั่นใจและสถิติความแม่นยำ
+    
+    3. **🎮 Simulation Mode**
+       - จำลองการเพิ่ม/ลดสินค้าใน 11 ช่อง
+       - ปรับสถานะได้ด้วยปุ่มกด
+       - ทดสอบระบบแจ้งเตือน
+    
+    **ความหมายของสี:**
+    - 🟢 เขียว = มีสินค้า
+    - 🔴 แดง = สินค้าหมด
+    - 🟠 ส้ม = มีสินค้าแต่ผิดช่อง
+    
+    **ไฟล์ที่เกี่ยวข้อง:**
+    - `stock_history.json` - ประวัติสต็อก
+    - `validation_history.json` - ประวัติการทดสอบ
+    - `simulation_state.json` - สถานะ Simulation
+    """)
