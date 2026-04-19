@@ -1,16 +1,14 @@
 {
-  "last_status": {
-    "S01": false,
-    "S02": false,
-    "S03": true,
-    "S04": true,
-    "S05": false,
-    "S06": false,
-    "S07": false,
-    "S08": true,
-    "S09": true,
-    "S10": false,
-    "S11": false
-  },
-  "last_update": "2026-04-19T23:04:23.693622"
+  "S01": false,
+  "S02": false,
+  "S03": false,
+  "S04": false,
+  "S05": false,
+  "S06": false,
+  "S07": false,
+  "S08": false,
+  "S09": false,
+  "S10": false,
+  "S11": false,
+  "last_update": "2026-04-19T23:42:11.643268"
 }
