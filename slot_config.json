@@ -1,0 +1,115 @@
+{
+  "slots": [
+    {
+      "id": "S01",
+      "name": "Canned tea",
+      "rel_bbox": [
+        0.02,
+        0.02,
+        0.23,
+        0.28
+      ]
+    },
+    {
+      "id": "S02",
+      "name": "Coconut Water Carton",
+      "rel_bbox": [
+        0.25,
+        0.02,
+        0.46,
+        0.28
+      ]
+    },
+    {
+      "id": "S03",
+      "name": "Coffee Can",
+      "rel_bbox": [
+        0.48,
+        0.02,
+        0.69,
+        0.28
+      ]
+    },
+    {
+      "id": "S04",
+      "name": "Drinking water",
+      "rel_bbox": [
+        0.71,
+        0.02,
+        0.92,
+        0.28
+      ]
+    },
+    {
+      "id": "S05",
+      "name": "Energy Drink",
+      "rel_bbox": [
+        0.02,
+        0.31,
+        0.23,
+        0.57
+      ]
+    },
+    {
+      "id": "S06",
+      "name": "Green Tea Bottle",
+      "rel_bbox": [
+        0.25,
+        0.31,
+        0.46,
+        0.57
+      ]
+    },
+    {
+      "id": "S07",
+      "name": "Juice Box",
+      "rel_bbox": [
+        0.48,
+        0.31,
+        0.69,
+        0.57
+      ]
+    },
+    {
+      "id": "S08",
+      "name": "Protein Drink",
+      "rel_bbox": [
+        0.71,
+        0.31,
+        0.92,
+        0.57
+      ]
+    },
+    {
+      "id": "S09",
+      "name": "Soda Can",
+      "rel_bbox": [
+        0.02,
+        0.6,
+        0.3,
+        0.86
+      ]
+    },
+    {
+      "id": "S10",
+      "name": "UHT milk carton",
+      "rel_bbox": [
+        0.35,
+        0.6,
+        0.63,
+        0.86
+      ]
+    },
+    {
+      "id": "S11",
+      "name": "Vitamin Drink",
+      "rel_bbox": [
+        0.68,
+        0.6,
+        0.96,
+        0.86
+      ]
+    }
+  ],
+  "last_update": "2026-04-20T01:03:06.210677"
+}
