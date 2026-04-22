@@ -14,6 +14,9 @@ import random
 import requests
 from io import BytesIO
 
+# ------------------- ตั้งค่า page config -------------------
+st.set_page_config(page_title="🥤 Stock Vision System APP", layout="wide")
+
 # Session state สำหรับเก็บสถานะการปรับแต่ง
 if 'edit_mode' not in st.session_state:
     st.session_state.edit_mode = False
@@ -21,9 +24,10 @@ if 'selected_slot' not in st.session_state:
     st.session_state.selected_slot = None
 if 'temp_slot_boxes' not in st.session_state:
     st.session_state.temp_slot_boxes = None
-
-# ------------------- ตั้งค่า page config -------------------
-st.set_page_config(page_title="🥤 Stock Vision System APP", layout="wide")
+if 'show_simple_editor' not in st.session_state:
+    st.session_state.show_simple_editor = False
+if 'edit_image' not in st.session_state:
+    st.session_state.edit_image = None
 
 # ------------------- โหลดโมเดล -------------------
 @st.cache_resource
@@ -90,293 +94,6 @@ UPLOAD_HISTORY_FILE = "upload_history.json"
 VALIDATION_HISTORY_FILE = "validation_history.json"
 SIMULATION_FILE = "simulation_state.json"
 SLOT_CONFIG_FILE = "slot_config.json"
-
-def interactive_slot_editor(image_path):
-    """
-    หน้าจอสำหรับปรับแต่งกรอบแต่ละช่องด้วยการลากวาง
-    """
-    st.subheader("🎯 ปรับแต่งกรอบสินค้าแบบ Drag & Drop")
-    st.markdown("**คลิกที่กรอบ แล้วลากมุมเพื่อปรับขนาด หรือลากตัวกรอบเพื่อย้ายตำแหน่ง**")
-    
-    # โหลดภาพ
-    if isinstance(image_path, str):
-        img = Image.open(image_path).convert("RGB")
-    else:
-        img = image_path
-    
-    img_array = np.array(img)
-    img_w, img_h = img.size
-    
-    # ใช้ slot_boxes ปัจจุบัน
-    if st.session_state.temp_slot_boxes is None:
-        st.session_state.temp_slot_boxes = st.session_state.slot_boxes.copy()
-    
-    slot_boxes = st.session_state.temp_slot_boxes
-    
-    # แสดงภาพพร้อมกรอบที่สามารถปรับได้
-    st.markdown("### 🖱️ ภาพพร้อมกรอบ (คลิกที่กรอบเพื่อเลือก)")
-    
-    # สร้าง canvas สำหรับแสดงภาพ
-    from streamlit_drawable_canvas import st_canvas
-    
-    # แปลงพิกัดเป็น absolute
-    abs_boxes = []
-    for slot in slot_boxes:
-        x1 = int(slot["rel_bbox"][0] * img_w)
-        y1 = int(slot["rel_bbox"][1] * img_h)
-        x2 = int(slot["rel_bbox"][2] * img_w)
-        y2 = int(slot["rel_bbox"][3] * img_h)
-        abs_boxes.append({
-            "id": slot["id"],
-            "name": slot["name"],
-            "bbox": [x1, y1, x2, y2]
-        })
-    
-    # แสดงรายการช่องให้เลือก
-    col1, col2 = st.columns([1, 2])
-    
-    with col1:
-        st.markdown("#### 📋 เลือกช่องที่ต้องการปรับ")
-        
-        # แสดงปุ่มเลือกช่องแบบ Grid
-        for row in range(4):
-            cols = st.columns(3)
-            for col in range(3):
-                idx = row * 3 + col
-                if idx < len(slot_boxes):
-                    slot = slot_boxes[idx]
-                    thai_name = PRODUCT_LIST[idx]["thai_name"]
-                    
-                    button_style = "primary" if st.session_state.selected_slot == slot["id"] else "secondary"
-                    if st.button(f"{slot['id']}: {thai_name}", 
-                                 key=f"select_{slot['id']}",
-                                 type=button_style,
-                                 use_container_width=True):
-                        st.session_state.selected_slot = slot["id"]
-                        st.rerun()
-        
-        st.markdown("---")
-        st.markdown("#### 🎛️ ปรับแต่งแบบละเอียด")
-        
-        if st.session_state.selected_slot:
-            selected = next(s for s in slot_boxes if s["id"] == st.session_state.selected_slot)
-            idx = [s["id"] for s in slot_boxes].index(st.session_state.selected_slot)
-            thai_name = PRODUCT_LIST[idx]["thai_name"]
-            
-            st.markdown(f"**กำลังปรับ: {selected['id']} - {thai_name}**")
-            
-            # Slider สำหรับปรับตำแหน่ง
-            x1, y1, x2, y2 = selected["rel_bbox"]
-            
-            new_x1 = st.slider(f"ขอบซ้าย (x1)", 0.0, x2-0.01, x1, 0.005, key="x1_slider")
-            new_x2 = st.slider(f"ขอบขวา (x2)", new_x1+0.01, 1.0, x2, 0.005, key="x2_slider")
-            new_y1 = st.slider(f"ขอบบน (y1)", 0.0, y2-0.01, y1, 0.005, key="y1_slider")
-            new_y2 = st.slider(f"ขอบล่าง (y2)", new_y1+0.01, 1.0, y2, 0.005, key="y2_slider")
-            
-            if (new_x1, new_y1, new_x2, new_y2) != (x1, y1, x2, y2):
-                selected["rel_bbox"] = [new_x1, new_y1, new_x2, new_y2]
-                st.rerun()
-            
-            # ปุ่มรีเซ็ตช่องนี้
-            default_slot = DEFAULT_SLOT_RELATIVE_BOXES[idx]
-            if st.button(f"↺ รีเซ็ต {selected['id']}"):
-                selected["rel_bbox"] = default_slot["rel_bbox"].copy()
-                st.rerun()
-    
-    with col2:
-        # วาดภาพพร้อมกรอบ
-        img_draw = img.copy()
-        draw = ImageDraw.Draw(img_draw)
-        font = get_thai_font(14)
-        
-        for i, slot in enumerate(slot_boxes):
-            x1 = int(slot["rel_bbox"][0] * img_w)
-            y1 = int(slot["rel_bbox"][1] * img_h)
-            x2 = int(slot["rel_bbox"][2] * img_w)
-            y2 = int(slot["rel_bbox"][3] * img_h)
-            
-            # เลือกสี: น้ำเงินถ้าถูกเลือก, เขียวถ้าไม่ถูกเลือก
-            if st.session_state.selected_slot == slot["id"]:
-                color = (0, 255, 255)  # สีเหลือง
-                width = 4
-            else:
-                color = (0, 255, 0)    # สีเขียว
-                width = 2
-            
-            draw.rectangle([x1, y1, x2, y2], outline=color, width=width)
-            
-            # แสดง label
-            thai_name = PRODUCT_LIST[i]["thai_name"]
-            label = f"{slot['id']}: {thai_name}"
-            draw.text((x1+5, y1+5), label, fill=(255, 255, 0), font=font)
-        
-        st.image(np.array(img_draw), caption="คลิกเลือกช่องทางซ้าย แล้วปรับตำแหน่ง", use_container_width=True)
-    
-    # ปุ่มควบคุม
-    st.markdown("---")
-    col_btn1, col_btn2, col_btn3, col_btn4 = st.columns(4)
-    
-    with col_btn1:
-        if st.button("💾 บันทึกการตั้งค่า", type="primary", use_container_width=True):
-            save_slot_config(slot_boxes)
-            st.session_state.slot_boxes = slot_boxes
-            st.session_state.temp_slot_boxes = None
-            st.session_state.edit_mode = False
-            st.success("✅ บันทึกการตั้งค่าเรียบร้อย!")
-            st.rerun()
-    
-    with col_btn2:
-        if st.button("↺ รีเซ็ตทั้งหมด", use_container_width=True):
-            st.session_state.temp_slot_boxes = DEFAULT_SLOT_RELATIVE_BOXES.copy()
-            st.rerun()
-    
-    with col_btn3:
-        if st.button("❌ ยกเลิก", use_container_width=True):
-            st.session_state.temp_slot_boxes = None
-            st.session_state.edit_mode = False
-            st.session_state.selected_slot = None
-            st.rerun()
-    
-    with col_btn4:
-        # ปุ่มทดสอบ
-        if st.button("🧪 ทดสอบกับภาพนี้", use_container_width=True):
-            # สร้าง slot_statuses จำลอง (ทุกช่องมีสินค้า)
-            test_statuses = []
-            for slot in slot_boxes:
-                test_statuses.append({
-                    "id": slot["id"],
-                    "name": slot["name"],
-                    "status": True,
-                    "detected": slot["name"],
-                    "is_correct": True,
-                    "confidence": 0.95
-                })
-            test_img = draw_slot_boxes_on_image(img_array, slot_boxes, test_statuses)
-            st.image(test_img, caption="ผลการทดสอบ", use_container_width=True)
-
-def simple_slot_editor():
-    """
-    หน้าจอปรับแต่งกรอบแบบง่าย โดยใช้ Slider ปรับแต่ละช่อง
-    """
-    st.subheader("📐 ปรับแต่งตำแหน่งกรอบแต่ละช่อง")
-    st.markdown("ปรับค่า x1, x2, y1, y2 ของแต่ละช่องได้ตามต้องการ")
-    
-    slot_boxes = st.session_state.slot_boxes.copy()
-    
-    # เลือกช่องที่จะปรับ
-    slot_options = [f"{s['id']}: {PRODUCT_LIST[i]['thai_name']}" for i, s in enumerate(slot_boxes)]
-    selected_idx = st.selectbox("เลือกช่องที่ต้องการปรับ", range(len(slot_options)), format_func=lambda x: slot_options[x])
-    
-    selected_slot = slot_boxes[selected_idx]
-    thai_name = PRODUCT_LIST[selected_idx]["thai_name"]
-    
-    st.markdown(f"### 🎯 กำลังปรับ: {selected_slot['id']} - {thai_name}")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("#### ตำแหน่งแนวนอน")
-        x1 = st.slider("ขอบซ้าย (x1)", 0.00, selected_slot["rel_bbox"][2]-0.01, 
-                       selected_slot["rel_bbox"][0], 0.005,
-                       key=f"x1_{selected_slot['id']}")
-        x2 = st.slider("ขอบขวา (x2)", x1+0.01, 1.00, 
-                       selected_slot["rel_bbox"][2], 0.005,
-                       key=f"x2_{selected_slot['id']}")
-        
-        st.markdown("#### ขนาดแนวนอน")
-        width = x2 - x1
-        st.metric("ความกว้าง", f"{width:.3f} ({width*100:.1f}%)")
-    
-    with col2:
-        st.markdown("#### ตำแหน่งแนวตั้ง")
-        y1 = st.slider("ขอบบน (y1)", 0.00, selected_slot["rel_bbox"][3]-0.01, 
-                       selected_slot["rel_bbox"][1], 0.005,
-                       key=f"y1_{selected_slot['id']}")
-        y2 = st.slider("ขอบล่าง (y2)", y1+0.01, 1.00, 
-                       selected_slot["rel_bbox"][3], 0.005,
-                       key=f"y2_{selected_slot['id']}")
-        
-        st.markdown("#### ขนาดแนวตั้ง")
-        height = y2 - y1
-        st.metric("ความสูง", f"{height:.3f} ({height*100:.1f}%)")
-    
-    # อัปเดตค่า
-    selected_slot["rel_bbox"] = [x1, y1, x2, y2]
-    
-    # แสดงตัวอย่าง
-    st.markdown("---")
-    st.markdown("#### 📸 ตัวอย่างตำแหน่งกรอบ")
-    
-    # สร้างภาพตัวอย่าง
-    demo_img = Image.new('RGB', (800, 600), color=(50, 50, 50))
-    draw = ImageDraw.Draw(demo_img)
-    font = get_thai_font(16)
-    
-    for i, slot in enumerate(slot_boxes):
-        x1 = int(slot["rel_bbox"][0] * 800)
-        y1 = int(slot["rel_bbox"][1] * 600)
-        x2 = int(slot["rel_bbox"][2] * 800)
-        y2 = int(slot["rel_bbox"][3] * 600)
-        
-        color = (0, 255, 0) if i != selected_idx else (255, 255, 0)
-        draw.rectangle([x1, y1, x2, y2], outline=color, width=2)
-        draw.text((x1+3, y1+3), slot['id'], fill=(255,255,255), font=font)
-    
-    st.image(np.array(demo_img), caption="ตัวอย่างตำแหน่ง (สีเหลือง = ช่องที่กำลังปรับ)", use_container_width=True)
-    
-    # ปุ่มบันทึก
-    col_btn1, col_btn2, col_btn3 = st.columns(3)
-    
-    with col_btn1:
-        if st.button("💾 บันทึกการตั้งค่า", type="primary", use_container_width=True):
-            save_slot_config(slot_boxes)
-            st.session_state.slot_boxes = slot_boxes
-            st.success("✅ บันทึกการตั้งค่าเรียบร้อย!")
-            st.rerun()
-    
-    with col_btn2:
-        if st.button("↺ รีเซ็ตทั้งหมด", use_container_width=True):
-            st.session_state.slot_boxes = DEFAULT_SLOT_RELATIVE_BOXES.copy()
-            save_slot_config(DEFAULT_SLOT_RELATIVE_BOXES)
-            st.rerun()
-    
-    with col_btn3:
-        if st.button("↺ รีเซ็ตเฉพาะช่องนี้", use_container_width=True):
-            default_box = DEFAULT_SLOT_RELATIVE_BOXES[selected_idx]["rel_bbox"]
-            selected_slot["rel_bbox"] = default_box.copy()
-            st.rerun()
-
-def add_slot_editor_to_sidebar():
-    """เพิ่มตัวเลือกการปรับแต่งกรอบใน Sidebar"""
-    with st.sidebar:
-        st.markdown("---")
-        st.subheader("📐 ปรับแต่งตำแหน่งกรอบ")
-        
-        editor_mode = st.radio(
-            "เลือกวิธีการปรับแต่ง",
-            ["🔧 ปรับทีละช่อง (Slider)", "🖱️ ลากวาง (Drag & Drop)"],
-            help="เลือกวิธีการปรับแต่งกรอบให้ตรงกับภาพ"
-        )
-        
-        if editor_mode == "🔧 ปรับทีละช่อง (Slider)":
-            if st.button("✏️ เปิดหน้าปรับแต่งกรอบ", use_container_width=True):
-                st.session_state.show_simple_editor = True
-                st.rerun()
-        else:
-            st.info("💡 อัปโหลดภาพ แล้วคลิกปุ่มด้านล่างเพื่อปรับแต่ง")
-            
-            uploaded_for_edit = st.file_uploader(
-                "อัปโหลดภาพเพื่อปรับแต่งกรอบ",
-                type=["jpg", "jpeg", "png"],
-                key="editor_uploader"
-            )
-            
-            if uploaded_for_edit:
-                if st.button("🎨 เปิดหน้าปรับแต่ง (Drag & Drop)", use_container_width=True):
-                    st.session_state.edit_image = uploaded_for_edit
-                    st.session_state.edit_mode = True
-                    st.rerun()
-
 
 # ==================== ฟังก์ชันจัดการ Slot Configuration ====================
 def save_slot_config(slot_boxes):
@@ -639,6 +356,33 @@ def draw_slot_boxes_on_image(img_array, slot_boxes, slot_statuses, show_labels=T
     
     return np.array(img_pil)
 
+def draw_slot_boxes_only(img_array, slot_boxes, selected_slot_id=None):
+    """วาดกรอบอย่างเดียว (สำหรับหน้าปรับแต่ง)"""
+    img_pil = Image.fromarray(img_array)
+    draw = ImageDraw.Draw(img_pil)
+    font = get_thai_font(16)
+    
+    h, w = img_array.shape[:2]
+    
+    for i, slot in enumerate(slot_boxes):
+        abs_bbox = rel_to_abs(slot["rel_bbox"], w, h)
+        x1, y1, x2, y2 = abs_bbox
+        
+        if selected_slot_id == slot["id"]:
+            color = (255, 255, 0)  # สีเหลือง
+            width = 4
+        else:
+            color = (0, 255, 0)    # สีเขียว
+            width = 2
+        
+        draw.rectangle([x1, y1, x2, y2], outline=color, width=width)
+        
+        thai_name = PRODUCT_LIST[i]["thai_name"]
+        label = f"{slot['id']}: {thai_name}"
+        draw.text((x1+5, y1+5), label, fill=(255, 255, 0), font=font)
+    
+    return np.array(img_pil)
+
 def generate_composite_image(output_path="shelf_complete.jpg"):
     """สร้างภาพจำลองที่มีสินค้าครบ 11 ช่อง"""
     img_w, img_h = 1200, 800
@@ -672,6 +416,263 @@ def generate_composite_image(output_path="shelf_complete.jpg"):
 # สร้างภาพตัวอย่าง (เรียกใช้ครั้งแรก)
 if not os.path.exists("shelf_complete.jpg"):
     generate_composite_image()
+
+# ==================== ฟังก์ชันปรับแต่งกรอบ (แบบไม่ต้องใช้ canvas) ====================
+
+def slot_editor_with_preview():
+    """หน้าจอปรับแต่งกรอบพร้อมตัวอย่างภาพจริง"""
+    st.subheader("📐 ปรับแต่งตำแหน่งกรอบให้ตรงกับภาพ")
+    
+    # อัปโหลดภาพ
+    uploaded_img = st.file_uploader(
+        "อัปโหลดภาพที่ต้องการปรับแต่งกรอบ", 
+        type=["jpg", "jpeg", "png"],
+        key="editor_img_uploader"
+    )
+    
+    if uploaded_img is None:
+        st.info("📸 กรุณาอัปโหลดภาพเพื่อเริ่มปรับแต่งกรอบ")
+        return
+    
+    img = Image.open(uploaded_img).convert("RGB")
+    img_array = np.array(img)
+    img_w, img_h = img.size
+    
+    # ใช้ slot_boxes ปัจจุบัน
+    if st.session_state.temp_slot_boxes is None:
+        st.session_state.temp_slot_boxes = st.session_state.slot_boxes.copy()
+    
+    slot_boxes = st.session_state.temp_slot_boxes
+    
+    col1, col2 = st.columns([1, 1.5])
+    
+    with col1:
+        st.markdown("#### 🎯 เลือกช่องที่ต้องการปรับ")
+        
+        # แสดงปุ่มเลือกช่องแบบ Grid
+        for row in range(4):
+            cols = st.columns(3)
+            for col in range(3):
+                idx = row * 3 + col
+                if idx < len(slot_boxes):
+                    slot = slot_boxes[idx]
+                    thai_name = PRODUCT_LIST[idx]["thai_name"]
+                    
+                    button_type = "primary" if st.session_state.selected_slot == slot["id"] else "secondary"
+                    if st.button(f"{slot['id']}: {thai_name}", 
+                                 key=f"select_{slot['id']}",
+                                 type=button_type,
+                                 use_container_width=True):
+                        st.session_state.selected_slot = slot["id"]
+                        st.rerun()
+        
+        st.markdown("---")
+        
+        if st.session_state.selected_slot:
+            selected = next(s for s in slot_boxes if s["id"] == st.session_state.selected_slot)
+            idx = [s["id"] for s in slot_boxes].index(st.session_state.selected_slot)
+            thai_name = PRODUCT_LIST[idx]["thai_name"]
+            
+            st.markdown(f"#### 🔧 กำลังปรับ: {selected['id']} - {thai_name}")
+            
+            x1, y1, x2, y2 = selected["rel_bbox"]
+            
+            # แสดงพิกัดปัจจุบัน
+            col_a, col_b = st.columns(2)
+            with col_a:
+                st.metric("ตำแหน่ง X", f"{x1:.3f} - {x2:.3f}")
+                st.metric("ความกว้าง", f"{(x2-x1):.3f} ({(x2-x1)*100:.1f}%)")
+            with col_b:
+                st.metric("ตำแหน่ง Y", f"{y1:.3f} - {y2:.3f}")
+                st.metric("ความสูง", f"{(y2-y1):.3f} ({(y2-y1)*100:.1f}%)")
+            
+            # Slider สำหรับปรับ
+            st.markdown("**ปรับตำแหน่งแนวนอน:**")
+            new_x1 = st.slider("ขอบซ้าย (x1)", 0.00, x2-0.01, x1, 0.005, key="edit_x1")
+            new_x2 = st.slider("ขอบขวา (x2)", new_x1+0.01, 1.00, x2, 0.005, key="edit_x2")
+            
+            st.markdown("**ปรับตำแหน่งแนวตั้ง:**")
+            new_y1 = st.slider("ขอบบน (y1)", 0.00, y2-0.01, y1, 0.005, key="edit_y1")
+            new_y2 = st.slider("ขอบล่าง (y2)", new_y1+0.01, 1.00, y2, 0.005, key="edit_y2")
+            
+            if (new_x1, new_y1, new_x2, new_y2) != (x1, y1, x2, y2):
+                selected["rel_bbox"] = [new_x1, new_y1, new_x2, new_y2]
+                st.rerun()
+            
+            # ปุ่มรีเซ็ตช่องนี้
+            col_r1, col_r2 = st.columns(2)
+            with col_r1:
+                if st.button(f"↺ รีเซ็ต {selected['id']}", use_container_width=True):
+                    selected["rel_bbox"] = DEFAULT_SLOT_RELATIVE_BOXES[idx]["rel_bbox"].copy()
+                    st.rerun()
+            with col_r2:
+                if st.button(f"📏 อัตโนมัติ (Auto-fit)", use_container_width=True):
+                    # ลองคำนวณจากความสว่างของภาพ
+                    abs_bbox = rel_to_abs(selected["rel_bbox"], img_w, img_h)
+                    x1a, y1a, x2a, y2a = abs_bbox
+                    roi = img_array[y1a:y2a, x1a:x2a]
+                    if roi.size > 0:
+                        gray = cv2.cvtColor(roi, cv2.COLOR_RGB2GRAY)
+                        # หาพื้นที่ที่มีความสว่างต่าง (น่าจะเป็นสินค้า)
+                        _, thresh = cv2.threshold(gray, 50, 255, cv2.THRESH_BINARY)
+                        contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                        if contours:
+                            max_contour = max(contours, key=cv2.contourArea)
+                            x, y, w, h = cv2.boundingRect(max_contour)
+                            # แปลงกลับเป็น relative
+                            new_x1 = (x1a + x) / img_w
+                            new_y1 = (y1a + y) / img_h
+                            new_x2 = (x1a + x + w) / img_w
+                            new_y2 = (y1a + y + h) / img_h
+                            selected["rel_bbox"] = [new_x1, new_y1, new_x2, new_y2]
+                            st.rerun()
+                    st.info("ลองปรับกรอบอัตโนมัติ (อาจไม่แม่น 100%)")
+    
+    with col2:
+        st.markdown("#### 📸 ตัวอย่างตำแหน่งกรอบ")
+        
+        # แสดงภาพพร้อมกรอบ
+        img_with_boxes = draw_slot_boxes_only(img_array, slot_boxes, st.session_state.selected_slot)
+        st.image(img_with_boxes, caption="🟢=กรอบปกติ, 🟡=กำลังปรับ", use_container_width=True)
+        
+        # แสดงพิกัดแบบเต็ม
+        with st.expander("📋 พิกัดทั้งหมด (Relative)"):
+            for slot in slot_boxes:
+                x1, y1, x2, y2 = slot["rel_bbox"]
+                st.code(f"{slot['id']}: [{x1:.3f}, {y1:.3f}, {x2:.3f}, {y2:.3f}]")
+    
+    # ปุ่มควบคุม
+    st.markdown("---")
+    col_btn1, col_btn2, col_btn3, col_btn4 = st.columns(4)
+    
+    with col_btn1:
+        if st.button("💾 บันทึกการตั้งค่า", type="primary", use_container_width=True):
+            save_slot_config(slot_boxes)
+            st.session_state.slot_boxes = slot_boxes
+            st.session_state.temp_slot_boxes = None
+            st.session_state.selected_slot = None
+            st.session_state.edit_mode = False
+            st.success("✅ บันทึกการตั้งค่าเรียบร้อย!")
+            st.rerun()
+    
+    with col_btn2:
+        if st.button("↺ รีเซ็ตทั้งหมด", use_container_width=True):
+            st.session_state.temp_slot_boxes = DEFAULT_SLOT_RELATIVE_BOXES.copy()
+            st.rerun()
+    
+    with col_btn3:
+        if st.button("❌ ยกเลิก", use_container_width=True):
+            st.session_state.temp_slot_boxes = None
+            st.session_state.selected_slot = None
+            st.session_state.edit_mode = False
+            st.rerun()
+    
+    with col_btn4:
+        if st.button("🧪 ทดสอบกับภาพนี้", use_container_width=True):
+            test_statuses = []
+            for slot in slot_boxes:
+                test_statuses.append({
+                    "id": slot["id"],
+                    "name": slot["name"],
+                    "status": True,
+                    "detected": slot["name"],
+                    "is_correct": True,
+                    "confidence": 0.95
+                })
+            test_img = draw_slot_boxes_on_image(img_array, slot_boxes, test_statuses)
+            st.image(test_img, caption="ผลการทดสอบ", use_container_width=True)
+
+
+def simple_slot_editor():
+    """หน้าจอปรับแต่งกรอบแบบง่าย โดยใช้ Slider ปรับแต่ละช่อง"""
+    st.subheader("📐 ปรับแต่งตำแหน่งกรอบแต่ละช่อง")
+    st.markdown("ปรับค่า x1, x2, y1, y2 ของแต่ละช่องได้ตามต้องการ")
+    
+    slot_boxes = st.session_state.slot_boxes.copy()
+    
+    # เลือกช่องที่จะปรับ
+    slot_options = [f"{s['id']}: {PRODUCT_LIST[i]['thai_name']}" for i, s in enumerate(slot_boxes)]
+    selected_idx = st.selectbox("เลือกช่องที่ต้องการปรับ", range(len(slot_options)), format_func=lambda x: slot_options[x])
+    
+    selected_slot = slot_boxes[selected_idx]
+    thai_name = PRODUCT_LIST[selected_idx]["thai_name"]
+    
+    st.markdown(f"### 🎯 กำลังปรับ: {selected_slot['id']} - {thai_name}")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("#### ตำแหน่งแนวนอน")
+        x1 = st.slider("ขอบซ้าย (x1)", 0.00, selected_slot["rel_bbox"][2]-0.01, 
+                       selected_slot["rel_bbox"][0], 0.005,
+                       key=f"x1_{selected_slot['id']}")
+        x2 = st.slider("ขอบขวา (x2)", x1+0.01, 1.00, 
+                       selected_slot["rel_bbox"][2], 0.005,
+                       key=f"x2_{selected_slot['id']}")
+        
+        st.markdown("#### ขนาดแนวนอน")
+        width = x2 - x1
+        st.metric("ความกว้าง", f"{width:.3f} ({width*100:.1f}%)")
+    
+    with col2:
+        st.markdown("#### ตำแหน่งแนวตั้ง")
+        y1 = st.slider("ขอบบน (y1)", 0.00, selected_slot["rel_bbox"][3]-0.01, 
+                       selected_slot["rel_bbox"][1], 0.005,
+                       key=f"y1_{selected_slot['id']}")
+        y2 = st.slider("ขอบล่าง (y2)", y1+0.01, 1.00, 
+                       selected_slot["rel_bbox"][3], 0.005,
+                       key=f"y2_{selected_slot['id']}")
+        
+        st.markdown("#### ขนาดแนวตั้ง")
+        height = y2 - y1
+        st.metric("ความสูง", f"{height:.3f} ({height*100:.1f}%)")
+    
+    # อัปเดตค่า
+    selected_slot["rel_bbox"] = [x1, y1, x2, y2]
+    
+    # แสดงตัวอย่าง
+    st.markdown("---")
+    st.markdown("#### 📸 ตัวอย่างตำแหน่งกรอบ")
+    
+    # สร้างภาพตัวอย่าง
+    demo_img = Image.new('RGB', (800, 600), color=(50, 50, 50))
+    draw = ImageDraw.Draw(demo_img)
+    font = get_thai_font(16)
+    
+    for i, slot in enumerate(slot_boxes):
+        x1 = int(slot["rel_bbox"][0] * 800)
+        y1 = int(slot["rel_bbox"][1] * 600)
+        x2 = int(slot["rel_bbox"][2] * 800)
+        y2 = int(slot["rel_bbox"][3] * 600)
+        
+        color = (0, 255, 0) if i != selected_idx else (255, 255, 0)
+        draw.rectangle([x1, y1, x2, y2], outline=color, width=2)
+        draw.text((x1+3, y1+3), slot['id'], fill=(255,255,255), font=font)
+    
+    st.image(np.array(demo_img), caption="ตัวอย่างตำแหน่ง (สีเหลือง = ช่องที่กำลังปรับ)", use_container_width=True)
+    
+    # ปุ่มบันทึก
+    col_btn1, col_btn2, col_btn3 = st.columns(3)
+    
+    with col_btn1:
+        if st.button("💾 บันทึกการตั้งค่า", type="primary", use_container_width=True):
+            save_slot_config(slot_boxes)
+            st.session_state.slot_boxes = slot_boxes
+            st.success("✅ บันทึกการตั้งค่าเรียบร้อย!")
+            st.rerun()
+    
+    with col_btn2:
+        if st.button("↺ รีเซ็ตทั้งหมด", use_container_width=True):
+            st.session_state.slot_boxes = DEFAULT_SLOT_RELATIVE_BOXES.copy()
+            save_slot_config(DEFAULT_SLOT_RELATIVE_BOXES)
+            st.rerun()
+    
+    with col_btn3:
+        if st.button("↺ รีเซ็ตเฉพาะช่องนี้", use_container_width=True):
+            default_box = DEFAULT_SLOT_RELATIVE_BOXES[selected_idx]["rel_bbox"]
+            selected_slot["rel_bbox"] = default_box.copy()
+            st.rerun()
+
 
 # ==================== ฟังก์ชันสำหรับทดสอบความแม่นยำ ====================
 def predict_single_product(img_array, conf_threshold=0.25):
@@ -1048,6 +1049,18 @@ def show_dashboard(slot_statuses):
 st.title("🥤 Stock Vision System APP")
 st.markdown("**ระบบตรวจจับสินค้าหมดอัจฉริยะ | รองรับการปรับแต่งตำแหน่งช่อง | เทคโนโลยี AI ขั้นสูง**")
 
+# ตรวจสอบว่ามีการเปิดหน้าปรับแต่งกรอบหรือไม่
+if st.session_state.get('edit_mode', False):
+    slot_editor_with_preview()
+    st.stop()
+
+if st.session_state.get('show_simple_editor', False):
+    simple_slot_editor()
+    if st.button("🔙 กลับหน้าหลัก"):
+        st.session_state.show_simple_editor = False
+        st.rerun()
+    st.stop()
+
 # Sidebar สำหรับการตั้งค่า
 with st.sidebar:
     st.header("⚙️ การตั้งค่าระบบ")
@@ -1062,7 +1075,27 @@ with st.sidebar:
     
     st.markdown("---")
     
-    with st.expander("📐 ปรับแต่งตำแหน่งช่อง (Expert)"):
+    # ปรับแต่งตำแหน่งช่อง
+    st.subheader("📐 ปรับแต่งตำแหน่งกรอบ")
+    
+    editor_mode = st.radio(
+        "เลือกวิธีการปรับแต่ง",
+        ["🔧 ปรับทีละช่อง (Slider)", "🖱️ ปรับพร้อมดูตัวอย่างภาพจริง"],
+        help="เลือกวิธีการปรับแต่งกรอบให้ตรงกับภาพ"
+    )
+    
+    if editor_mode == "🔧 ปรับทีละช่อง (Slider)":
+        if st.button("✏️ เปิดหน้าปรับแต่งกรอบ", use_container_width=True):
+            st.session_state.show_simple_editor = True
+            st.rerun()
+    else:
+        if st.button("🎨 เปิดหน้าปรับแต่ง (พร้อมตัวอย่างภาพ)", use_container_width=True, type="primary"):
+            st.session_state.edit_mode = True
+            st.rerun()
+    
+    st.markdown("---")
+    
+    with st.expander("📐 ปรับแต่งตำแหน่งช่องแบบรวม (Expert)"):
         st.info("💡 ปรับค่าเหล่านี้หากตำแหน่งกรอบไม่ตรงกับภาพ")
         
         row_offset_x = st.slider("ปรับตำแหน่งแนวนอนรวม", -0.05, 0.05, 0.0, 0.01)
@@ -1158,6 +1191,14 @@ if main_mode == "📦 ตรวจสอบสต็อกสินค้า":
                 st.session_state.current_slot_statuses = slot_statuses
                 add_alerts(empty_slots, slot_statuses)
                 save_stock_history(slot_statuses)
+                
+                # เพิ่มปุ่มปรับแต่งกรอบ
+                col_btn1, col_btn2 = st.columns(2)
+                with col_btn1:
+                    if st.button("✏️ ปรับแต่งกรอบให้ตรงกับภาพนี้", use_container_width=True):
+                        st.session_state.edit_image = uploaded_file
+                        st.session_state.edit_mode = True
+                        st.rerun()
                 
                 # ใช้ฟังก์ชันวาดภาพที่รองรับภาษาไทย
                 img_with_boxes = draw_slot_boxes_on_image(
@@ -1464,34 +1505,22 @@ with st.expander("📄 คู่มือการใช้งาน"):
     st.markdown("""
     ### 🥤 Stock Vision System APP
     
-    **ฟีเจอร์ใหม่ในเวอร์ชันนี้:**
-    - 🔧 **ปรับแต่งตำแหน่งช่องได้** (ใน Sidebar -> Expert)
+    **วิธีปรับแต่งกรอบให้ตรงกับภาพ:**
+    1. ไปที่ Sidebar → เลือก "🖱️ ปรับพร้อมดูตัวอย่างภาพจริง"
+    2. กดปุ่ม "🎨 เปิดหน้าปรับแต่ง"
+    3. อัปโหลดภาพที่ต้องการปรับแต่ง
+    4. คลิกเลือกช่องที่ต้องการปรับ (S01-S11)
+    5. ปรับค่า x1, x2 (ซ้าย-ขวา) และ y1, y2 (บน-ล่าง) จนกรอบครอบสินค้าพอดี
+    6. กด "💾 บันทึกการตั้งค่า"
+    
+    **ฟีเจอร์อื่นๆ:**
+    - 🔧 **ปรับแต่งตำแหน่งช่องได้** (ใน Sidebar)
     - 🎯 **ตรวจจับแบบ Ensemble** (ภาพต้นฉบับ + ปรับคุณภาพ)
     - 💾 **บันทึกการตั้งค่าช่องอัตโนมัติ**
-    - 📊 **แสดง Confidence Score** ทุกรายการ
     - 🇹🇭 **รองรับภาษาไทยเต็มรูปแบบ**
     
-    **โหมดการทำงาน:**
-    
-    1. **📦 ตรวจสอบสต็อกสินค้า**
-       - อัปโหลดหรือถ่ายภาพชั้นวางสินค้า
-       - ระบบแสดงกรอบ 11 ช่อง (🟢=มีสินค้า, 🔴=สินค้าหมด)
-       - ปรับแต่งตำแหน่งกรอบได้หากไม่ตรง
-    
-    2. **🎯 ทดสอบความแม่นยำโมเดล**
-       - อัปโหลดภาพสินค้าเดี่ยว
-       - ระบบทำนายว่าเป็นสินค้าชนิดไหนใน 11 ประเภท
-    
-    3. **🎮 Simulation Mode**
-       - จำลองการเพิ่ม/ลดสินค้าใน 11 ช่อง
-       - ทดสอบระบบแจ้งเตือน
-    
-    **การสร้างภาพตัวอย่าง:**
-    - กดปุ่ม "สร้างภาพตัวอย่าง" ใน Sidebar
-    - จะได้ไฟล์ `shelf_complete.jpg` ที่มีสินค้าครบ 11 ช่อง
-    
     **คำแนะนำ:**
-    - ถ้าตำแหน่งกรอบไม่ตรงภาพ ให้ปรับในส่วน Expert Settings
+    - ถ้าตำแหน่งกรอบไม่ตรงภาพ ให้ใช้ฟังก์ชันปรับแต่งกรอบ
     - Confidence threshold แนะนำ 0.15-0.25
     - ถ่ายภาพให้ตรงและแสงสว่างเพียงพอ
     """)

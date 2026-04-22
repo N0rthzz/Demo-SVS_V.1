@@ -1,0 +1,69 @@
+{
+  "S01": {
+    "status": false,
+    "detected": "ไม่มีสินค้า",
+    "is_correct": false,
+    "confidence": 0.0
+  },
+  "S02": {
+    "status": false,
+    "detected": "ไม่มีสินค้า",
+    "is_correct": false,
+    "confidence": 0.0
+  },
+  "S03": {
+    "status": false,
+    "detected": "ไม่มีสินค้า",
+    "is_correct": false,
+    "confidence": 0.0
+  },
+  "S04": {
+    "status": true,
+    "detected": "Drinking water",
+    "is_correct": true,
+    "confidence": 0.35
+  },
+  "S05": {
+    "status": true,
+    "detected": "Energy Drink",
+    "is_correct": true,
+    "confidence": 0.35
+  },
+  "S06": {
+    "status": false,
+    "detected": "ไม่มีสินค้า",
+    "is_correct": false,
+    "confidence": 0.0
+  },
+  "S07": {
+    "status": false,
+    "detected": "ไม่มีสินค้า",
+    "is_correct": false,
+    "confidence": 0.0
+  },
+  "S08": {
+    "status": true,
+    "detected": "Protein Drink",
+    "is_correct": true,
+    "confidence": 0.35
+  },
+  "S09": {
+    "status": true,
+    "detected": "Soda Can",
+    "is_correct": true,
+    "confidence": 0.35
+  },
+  "S10": {
+    "status": false,
+    "detected": "ไม่มีสินค้า",
+    "is_correct": false,
+    "confidence": 0.0
+  },
+  "S11": {
+    "status": true,
+    "detected": "Vitamin Drink",
+    "is_correct": true,
+    "confidence": 0.35
+  },
+  "last_update": "2026-04-23T00:36:32.462959"
+}
