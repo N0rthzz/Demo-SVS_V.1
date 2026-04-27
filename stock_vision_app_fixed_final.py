@@ -37,55 +37,64 @@ def load_model():
 
 model = load_model()
 
+# ------------------- กำหนด 11 สินค้าตามที่ระบุ -------------------
 CLASS_NAMES = [
-    "Canned tea", "Coconut Water Carton", "Coffee Can", "Drinking water",
-    "Empty_Stock", "Energy Drink", "Green Tea Bottle", "Juice Box",
-    "Protein Drink", "Soda Can", "UHT milk carton", "Vitamin Drink"
+    "Coke Can",
+    "Coke Light Can",
+    "Fanta Grape",
+    "Fanta Orange Can",
+    "Lactasoy",
+    "Meiji Milk",
+    "Oishi Rice",
+    "Oishi Honey Lemon",
+    "Oishi Kyoho",
+    "Pepsi Can",
+    "Sprite Can"
 ]
 
 # ชื่อสินค้าภาษาไทย
 THAI_NAMES = {
-    "Canned tea": "ชากระป๋อง",
-    "Coconut Water Carton": "น้ำมะพร้าวกล่อง",
-    "Coffee Can": "กาแฟกระป๋อง",
-    "Drinking water": "น้ำดื่ม",
-    "Energy Drink": "เครื่องดื่มชูกำลัง",
-    "Green Tea Bottle": "ชาเขียวขวด",
-    "Juice Box": "น้ำผลไม้กล่อง",
-    "Protein Drink": "เครื่องดื่มโปรตีน",
-    "Soda Can": "โซดากระป๋อง",
-    "UHT milk carton": "นม UHT กล่อง",
-    "Vitamin Drink": "เครื่องดื่มวิตามิน"
+    "Coke Can": "โค้กออริจินัล กระป๋องสีแดง",
+    "Coke Light Can": "โค้กไลท์ กระป๋องสีเงิน",
+    "Fanta Grape": "แฟนต้าน้ำองุ่น กระป๋องสีม่วง",
+    "Fanta Orange Can": "แฟนต้าน้ำส้ม กระป๋องสีส้ม",
+    "Lactasoy": "นมถั่วเหลืองแลคตาซอย กล่องสีฟ้า",
+    "Meiji Milk": "นมสดเมจิ ขวดสีขาวฝาน้ำเงิน",
+    "Oishi Rice": "ชาเขียวโออิชิ รสข้าวญี่ปุ่น ขวดสีส้ม",
+    "Oishi Honey Lemon": "ชาเขียวโออิชิ รสน้ำผึ้งผสมมะนาว ขวดสีเหลือง",
+    "Oishi Kyoho": "ชาเขียวโออิชิ รสเคียวโฮ ขวดสีม่วง",
+    "Pepsi Can": "เป๊ปซี่ กระป๋องสีน้ำเงิน",
+    "Sprite Can": "สไปรท์ กระป๋องสีเขียว"
 }
 
-# ------------------- PRODUCT LIST -------------------
+# ------------------- PRODUCT LIST สำหรับ 11 ช่อง -------------------
 PRODUCT_LIST = [
-    {"id": "S01", "name": "Canned tea", "thai_name": "ชากระป๋อง"},
-    {"id": "S02", "name": "Coconut Water Carton", "thai_name": "น้ำมะพร้าวกล่อง"},
-    {"id": "S03", "name": "Coffee Can", "thai_name": "กาแฟกระป๋อง"},
-    {"id": "S04", "name": "Drinking water", "thai_name": "น้ำดื่ม"},
-    {"id": "S05", "name": "Energy Drink", "thai_name": "เครื่องดื่มชูกำลัง"},
-    {"id": "S06", "name": "Green Tea Bottle", "thai_name": "ชาเขียวขวด"},
-    {"id": "S07", "name": "Juice Box", "thai_name": "น้ำผลไม้กล่อง"},
-    {"id": "S08", "name": "Protein Drink", "thai_name": "เครื่องดื่มโปรตีน"},
-    {"id": "S09", "name": "Soda Can", "thai_name": "โซดากระป๋อง"},
-    {"id": "S10", "name": "UHT milk carton", "thai_name": "นม UHT กล่อง"},
-    {"id": "S11", "name": "Vitamin Drink", "thai_name": "เครื่องดื่มวิตามิน"}
+    {"id": "S01", "name": "Coke Can", "thai_name": "โค้กออริจินัล กระป๋องสีแดง"},
+    {"id": "S02", "name": "Coke Light Can", "thai_name": "โค้กไลท์ กระป๋องสีเงิน"},
+    {"id": "S03", "name": "Fanta Grape", "thai_name": "แฟนต้าน้ำองุ่น กระป๋องสีม่วง"},
+    {"id": "S04", "name": "Fanta Orange Can", "thai_name": "แฟนต้าน้ำส้ม กระป๋องสีส้ม"},
+    {"id": "S05", "name": "Lactasoy", "thai_name": "นมถั่วเหลืองแลคตาซอย กล่องสีฟ้า"},
+    {"id": "S06", "name": "Meiji Milk", "thai_name": "นมสดเมจิ ขวดสีขาวฝาน้ำเงิน"},
+    {"id": "S07", "name": "Oishi Rice", "thai_name": "ชาเขียวโออิชิ รสข้าวญี่ปุ่น ขวดสีส้ม"},
+    {"id": "S08", "name": "Oishi Honey Lemon", "thai_name": "ชาเขียวโออิชิ รสน้ำผึ้งผสมมะนาว ขวดสีเหลือง"},
+    {"id": "S09", "name": "Oishi Kyoho", "thai_name": "ชาเขียวโออิชิ รสเคียวโฮ ขวดสีม่วง"},
+    {"id": "S10", "name": "Pepsi Can", "thai_name": "เป๊ปซี่ กระป๋องสีน้ำเงิน"},
+    {"id": "S11", "name": "Sprite Can", "thai_name": "สไปรท์ กระป๋องสีเขียว"}
 ]
 
 # ------------------- กำหนด Shelf Slot 11 ช่อง -------------------
 DEFAULT_SLOT_RELATIVE_BOXES = [
-    {"id": "S01", "name": "Canned tea", "rel_bbox": [0.02, 0.02, 0.23, 0.28]},
-    {"id": "S02", "name": "Coconut Water Carton", "rel_bbox": [0.25, 0.02, 0.46, 0.28]},
-    {"id": "S03", "name": "Coffee Can", "rel_bbox": [0.48, 0.02, 0.69, 0.28]},
-    {"id": "S04", "name": "Drinking water", "rel_bbox": [0.71, 0.02, 0.92, 0.28]},
-    {"id": "S05", "name": "Energy Drink", "rel_bbox": [0.02, 0.31, 0.23, 0.57]},
-    {"id": "S06", "name": "Green Tea Bottle", "rel_bbox": [0.25, 0.31, 0.46, 0.57]},
-    {"id": "S07", "name": "Juice Box", "rel_bbox": [0.48, 0.31, 0.69, 0.57]},
-    {"id": "S08", "name": "Protein Drink", "rel_bbox": [0.71, 0.31, 0.92, 0.57]},
-    {"id": "S09", "name": "Soda Can", "rel_bbox": [0.02, 0.60, 0.30, 0.86]},
-    {"id": "S10", "name": "UHT milk carton", "rel_bbox": [0.35, 0.60, 0.63, 0.86]},
-    {"id": "S11", "name": "Vitamin Drink", "rel_bbox": [0.68, 0.60, 0.96, 0.86]},
+    {"id": "S01", "name": "Coke Can", "rel_bbox": [0.02, 0.02, 0.23, 0.28]},
+    {"id": "S02", "name": "Coke Light Can", "rel_bbox": [0.25, 0.02, 0.46, 0.28]},
+    {"id": "S03", "name": "Fanta Grape", "rel_bbox": [0.48, 0.02, 0.69, 0.28]},
+    {"id": "S04", "name": "Fanta Orange Can", "rel_bbox": [0.71, 0.02, 0.92, 0.28]},
+    {"id": "S05", "name": "Lactasoy", "rel_bbox": [0.02, 0.31, 0.23, 0.57]},
+    {"id": "S06", "name": "Meiji Milk", "rel_bbox": [0.25, 0.31, 0.46, 0.57]},
+    {"id": "S07", "name": "Oishi Rice", "rel_bbox": [0.48, 0.31, 0.69, 0.57]},
+    {"id": "S08", "name": "Oishi Honey Lemon", "rel_bbox": [0.71, 0.31, 0.92, 0.57]},
+    {"id": "S09", "name": "Oishi Kyoho", "rel_bbox": [0.02, 0.60, 0.30, 0.86]},
+    {"id": "S10", "name": "Pepsi Can", "rel_bbox": [0.35, 0.60, 0.63, 0.86]},
+    {"id": "S11", "name": "Sprite Can", "rel_bbox": [0.68, 0.60, 0.96, 0.86]},
 ]
 
 # ไฟล์สำหรับเก็บประวัติ
@@ -168,7 +177,8 @@ def detect_with_ensemble(img_array, conf_threshold=0.25):
                 class_name = CLASS_NAMES[cls_id]
                 confidence = float(box.conf[0])
                 
-                if class_name != "Empty_Stock" and confidence >= conf_threshold:
+                # ไม่มี Empty_Stock แล้ว เก็บทุกการตรวจจับ
+                if confidence >= conf_threshold:
                     x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
                     all_detections.append([x1, y1, x2, y2, class_name, confidence])
     
@@ -686,13 +696,12 @@ def predict_single_product(img_array, conf_threshold=0.25):
             confidence = float(box.conf[0])
             x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
             
-            if class_name != "Empty_Stock":
-                predictions.append({
-                    "class_name": class_name,
-                    "thai_name": THAI_NAMES.get(class_name, class_name),
-                    "confidence": confidence,
-                    "bbox": [x1, y1, x2, y2]
-                })
+            predictions.append({
+                "class_name": class_name,
+                "thai_name": THAI_NAMES.get(class_name, class_name),
+                "confidence": confidence,
+                "bbox": [x1, y1, x2, y2]
+            })
     
     predictions.sort(key=lambda x: x["confidence"], reverse=True)
     return predictions
@@ -700,7 +709,7 @@ def predict_single_product(img_array, conf_threshold=0.25):
 def predict_all_categories(img_array, conf_threshold=0.25):
     results = model(img_array, conf=conf_threshold)
     
-    category_scores = {name: 0.0 for name in CLASS_NAMES if name != "Empty_Stock"}
+    category_scores = {name: 0.0 for name in CLASS_NAMES}
     
     if results[0].boxes is not None:
         for box in results[0].boxes:
@@ -708,7 +717,7 @@ def predict_all_categories(img_array, conf_threshold=0.25):
             class_name = CLASS_NAMES[cls_id]
             confidence = float(box.conf[0])
             
-            if class_name != "Empty_Stock" and confidence >= conf_threshold:
+            if confidence >= conf_threshold:
                 if confidence > category_scores[class_name]:
                     category_scores[class_name] = confidence
     
@@ -808,7 +817,7 @@ def calculate_model_accuracy():
     
     total = 0
     correct = 0
-    category_stats = {name: {"total": 0, "correct": 0} for name in CLASS_NAMES if name != "Empty_Stock"}
+    category_stats = {name: {"total": 0, "correct": 0} for name in CLASS_NAMES}
     
     for record in history:
         if record.get("actual_label") and record.get("top_prediction"):
@@ -1076,7 +1085,7 @@ with st.sidebar:
     st.markdown("---")
     
     # ปรับแต่งตำแหน่งช่อง
-    st.subheader("📐 ปรับแต่งตำแหน่งกรอบ")
+    st.subheader("📐 ปรับแต่งตำแแหน่งกรอบ")
     
     editor_mode = st.radio(
         "เลือกวิธีการปรับแต่ง",
@@ -1486,7 +1495,7 @@ else:
             st.write(f"  • ช่อง {slot['id']}: {THAI_NAMES.get(slot['name'], slot['name'])}")
     else:
         st.balloons()
-        st.success("🎉 สินค้าครบทุกช่อง!")
+        st.success("🎉 สินค้าครบทุช่อง!")
     
     st.markdown("---")
     st.subheader("🔔 ทดสอบระบบแจ้งเตือน")
@@ -1504,7 +1513,20 @@ st.markdown("---")
 with st.expander("📄 คู่มือการใช้งาน"):
     st.markdown("""
     ### 🥤 Stock Vision System APP
-    
+
+    **ระบบตรวจจับสินค้า 11 ชนิด:**
+    - Coke Can (โค้กออริจินัล กระป๋องสีแดง)
+    - Coke Light Can (โค้กไลท์ กระป๋องสีเงิน)
+    - Fanta Grape (แฟนต้าน้ำองุ่น กระป๋องสีม่วง)
+    - Fanta Orange Can (แฟนต้าน้ำส้ม กระป๋องสีส้ม)
+    - Lactasoy (นมถั่วเหลืองแลคตาซอย กล่องสีฟ้า)
+    - Meiji Milk (นมสดเมจิ ขวดสีขาวฝาน้ำเงิน)
+    - Oishi Rice (ชาเขียวโออิชิ รสข้าวญี่ปุ่น ขวดสีส้ม)
+    - Oishi Honey Lemon (ชาเขียวโออิชิ รสน้ำผึ้งผสมมะนาว ขวดสีเหลือง)
+    - Oishi Kyoho (ชาเขียวโออิชิ รสเคียวโฮ ขวดสีม่วง)
+    - Pepsi Can (เป๊ปซี่ กระป๋องสีน้ำเงิน)
+    - Sprite Can (สไปรท์ กระป๋องสีเขียว)
+
     **วิธีปรับแต่งกรอบให้ตรงกับภาพ:**
     1. ไปที่ Sidebar → เลือก "🖱️ ปรับพร้อมดูตัวอย่างภาพจริง"
     2. กดปุ่ม "🎨 เปิดหน้าปรับแต่ง"
@@ -1512,15 +1534,9 @@ with st.expander("📄 คู่มือการใช้งาน"):
     4. คลิกเลือกช่องที่ต้องการปรับ (S01-S11)
     5. ปรับค่า x1, x2 (ซ้าย-ขวา) และ y1, y2 (บน-ล่าง) จนกรอบครอบสินค้าพอดี
     6. กด "💾 บันทึกการตั้งค่า"
-    
-    **ฟีเจอร์อื่นๆ:**
-    - 🔧 **ปรับแต่งตำแหน่งช่องได้** (ใน Sidebar)
-    - 🎯 **ตรวจจับแบบ Ensemble** (ภาพต้นฉบับ + ปรับคุณภาพ)
-    - 💾 **บันทึกการตั้งค่าช่องอัตโนมัติ**
-    - 🇹🇭 **รองรับภาษาไทยเต็มรูปแบบ**
-    
+
     **คำแนะนำ:**
-    - ถ้าตำแหน่งกรอบไม่ตรงภาพ ให้ใช้ฟังก์ชันปรับแต่งกรอบ
-    - Confidence threshold แนะนำ 0.15-0.25
-    - ถ่ายภาพให้ตรงและแสงสว่างเพียงพอ
+    - ใช้ Confidence threshold 0.15-0.25 สำหรับสภาพแสงทั่วไป
+    - ควรถ่ายภาพให้ชัดเจนและแสงสว่างเพียงพอ
+    - สามารถทดสอบความแม่นยำของโมเดลได้ในโหมด "ทดสอบความแม่นยำโมเดล"
     """)

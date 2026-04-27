@@ -2,59 +2,59 @@
   "slots": [
     {
       "id": "S01",
-      "name": "Canned tea",
+      "name": "Coke Can",
       "status": false
     },
     {
       "id": "S02",
-      "name": "Coconut Water Carton",
+      "name": "Coke Light",
       "status": false
     },
     {
       "id": "S03",
-      "name": "Coffee Can",
+      "name": "Fanta Grape",
       "status": false
     },
     {
       "id": "S04",
-      "name": "Drinking water",
+      "name": "Fanta Orange",
       "status": false
     },
     {
       "id": "S05",
-      "name": "Energy Drink",
+      "name": "Lactasoy",
       "status": false
     },
     {
       "id": "S06",
-      "name": "Green Tea Bottle",
+      "name": "Meiji Milk",
       "status": false
     },
     {
       "id": "S07",
-      "name": "Juice Box",
+      "name": "Oishi Rice",
       "status": false
     },
     {
       "id": "S08",
-      "name": "Protein Drink",
+      "name": "Oishi Honey",
       "status": false
     },
     {
       "id": "S09",
-      "name": "Soda Can",
+      "name": "Oishi Kyoho",
       "status": false
     },
     {
       "id": "S10",
-      "name": "UHT milk carton",
+      "name": "Pepsi Can",
       "status": false
     },
     {
       "id": "S11",
-      "name": "Vitamin Drink",
+      "name": "Sprite Can",
       "status": false
     }
   ],
-  "last_update": "2026-04-23T00:04:00.062940"
+  "last_update": "2026-04-27T15:42:16.426284"
 }

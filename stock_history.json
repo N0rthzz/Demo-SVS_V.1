@@ -1,15 +1,15 @@
 {
   "S01": {
-    "status": false,
-    "detected": "ไม่มีสินค้า",
+    "status": true,
+    "detected": "Oishi Rice",
     "is_correct": false,
-    "confidence": 0.0
+    "confidence": 0.5276139339844026
   },
   "S02": {
-    "status": false,
-    "detected": "ไม่มีสินค้า",
-    "is_correct": false,
-    "confidence": 0.0
+    "status": true,
+    "detected": "Coconut Water Carton",
+    "is_correct": true,
+    "confidence": 0.35
   },
   "S03": {
     "status": false,
@@ -30,22 +30,22 @@
     "confidence": 0.35
   },
   "S06": {
-    "status": false,
-    "detected": "ไม่มีสินค้า",
-    "is_correct": false,
-    "confidence": 0.0
-  },
-  "S07": {
-    "status": false,
-    "detected": "ไม่มีสินค้า",
-    "is_correct": false,
-    "confidence": 0.0
-  },
-  "S08": {
     "status": true,
-    "detected": "Protein Drink",
+    "detected": "Green Tea Bottle",
     "is_correct": true,
     "confidence": 0.35
+  },
+  "S07": {
+    "status": true,
+    "detected": "Juice Box",
+    "is_correct": true,
+    "confidence": 0.35
+  },
+  "S08": {
+    "status": false,
+    "detected": "ไม่มีสินค้า",
+    "is_correct": false,
+    "confidence": 0.0
   },
   "S09": {
     "status": true,
@@ -60,10 +60,10 @@
     "confidence": 0.0
   },
   "S11": {
-    "status": true,
-    "detected": "Vitamin Drink",
-    "is_correct": true,
-    "confidence": 0.35
+    "status": false,
+    "detected": "ไม่มีสินค้า",
+    "is_correct": false,
+    "confidence": 0.0
   },
-  "last_update": "2026-04-23T00:36:32.462959"
+  "last_update": "2026-04-27T15:42:40.778891"
 }
