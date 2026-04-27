@@ -40,10 +40,9 @@ CLASS_TO_SLOT = {
 
 # Categorize into 3-3-3-2 groups
 CATEGORY_GROUPS = {
-    "Group 1 (Can Sodas 1)": ["S01", "S02", "S03"],
-    "Group 2 (Can Sodas 2)": ["S04", "S10", "S11"],
-    "Group 3 (Juice & Milk)": ["S05", "S06", "S07"],
-    "Group 4 (Oishi Teas)": ["S08", "S09"],
+    "Group 1 (Can Sodas 1)": ["S01", "S02", "S03","S04"],
+    "Group 2 (Can Sodas 2)": ["S05", "S06", "S07","S08"],
+    "Group 3 (Juice & Milk & Oishi Teas)": ["S09", "S10", "S11"],
 }
 
 def draw_shelf_slots(image, detections, slots):
