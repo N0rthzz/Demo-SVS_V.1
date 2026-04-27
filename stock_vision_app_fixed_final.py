@@ -32,8 +32,18 @@ if 'edit_image' not in st.session_state:
 # ------------------- โหลดโมเดล -------------------
 @st.cache_resource
 def load_model():
-    model = YOLO('best.pt')
-    return model
+    # พยายามโหลดโมเดลที่ดีที่สุด
+    model_paths = ['best.pt', 'best_s.pt', 'yolov8n.pt']
+    for path in model_paths:
+        if os.path.exists(path):
+            try:
+                model = YOLO(path)
+                st.success(f"✅ โหลดโมเดลสำเร็จ: {path}")
+                return model
+            except:
+                continue
+    st.error("❌ ไม่พบไฟล์โมเดล โปรดตรวจสอบ best.pt")
+    return YOLO('yolov8n.pt')  # fallback
 
 model = load_model()
 
@@ -66,6 +76,22 @@ THAI_NAMES = {
     "Pepsi Can": "เป๊ปซี่ กระป๋องสีน้ำเงิน",
     "Sprite Can": "สไปรท์ กระป๋องสีเขียว"
 }
+
+# สีหลักของแต่ละสินค้า (สำหรับการตรวจสอบเพิ่มเติม)
+PRODUCT_COLORS = {
+    "Coke Can": ([0, 50, 50], [10, 255, 255]),  # สีแดง
+    "Coke Light Can": ([0, 0, 200], [180, 50, 255]),  # สีเงิน/เทา
+    "Fanta Grape": ([130, 50, 50], [160, 255, 255]),  # สีม่วง
+    "Fanta Orange Can": ([5, 50, 50], [20, 255, 255]),  # สีส้ม
+    "Lactasoy": ([90, 50, 50], [120, 255, 255]),  # สีฟ้า/เขียว
+    "Meiji Milk": ([0, 0, 200], [180, 30, 255]),  # สีขาว
+    "Oishi Rice": ([15, 50, 50], [30, 255, 255]),  # สีส้มอมเหลือง
+    "Oishi Honey Lemon": ([20, 50, 50], [40, 255, 255]),  # สีเหลือง
+    "Oishi Kyoho": ([130, 50, 50], [160, 255, 255]),  # สีม่วง
+    "Pepsi Can": ([100, 50, 50], [130, 255, 255]),  # สีน้ำเงินเข้ม
+    "Sprite Can": ([40, 50, 50], [80, 255, 255])  # สีเขียว
+}
+
 
 # ------------------- PRODUCT LIST สำหรับ 11 ช่อง -------------------
 PRODUCT_LIST = [
@@ -103,6 +129,7 @@ UPLOAD_HISTORY_FILE = "upload_history.json"
 VALIDATION_HISTORY_FILE = "validation_history.json"
 SIMULATION_FILE = "simulation_state.json"
 SLOT_CONFIG_FILE = "slot_config.json"
+CONFIDENCE_LOG_FILE = "confidence_log.json"
 
 # ==================== ฟังก์ชันจัดการ Slot Configuration ====================
 def save_slot_config(slot_boxes):
@@ -115,6 +142,7 @@ def save_slot_config(slot_boxes):
             json.dump(config, f, indent=2, ensure_ascii=False, default=str)
     except Exception as e:
         print(f"Error saving slot config: {e}")
+
 
 def load_slot_config():
     if os.path.exists(SLOT_CONFIG_FILE):
@@ -150,38 +178,85 @@ def calculate_iou(box1, box2):
         return inter / (area1 + area2 - inter)
     return 0
 
-def enhance_image(img_array):
-    lab = cv2.cvtColor(img_array, cv2.COLOR_RGB2LAB)
-    l, a, b = cv2.split(lab)
-    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8,8))
-    l = clahe.apply(l)
-    enhanced = cv2.merge([l, a, b])
-    enhanced = cv2.cvtColor(enhanced, cv2.COLOR_LAB2RGB)
+def enhance_image(img_array, method='clahe'):
+    """ปรับปรุงคุณภาพภาพด้วยหลายวิธี"""
+    try:
+        if method == 'clahe':
+            lab = cv2.cvtColor(img_array, cv2.COLOR_RGB2LAB)
+            l, a, b = cv2.split(lab)
+            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+            l = clahe.apply(l)
+            enhanced = cv2.merge([l, a, b])
+            enhanced = cv2.cvtColor(enhanced, cv2.COLOR_LAB2RGB)
+        elif method == 'gamma':
+            gamma = 1.2
+            inv_gamma = 1.0 / gamma
+            table = np.array([((i / 255.0) ** inv_gamma) * 255 for i in range(256)]).astype("uint8")
+            enhanced = cv2.LUT(img_array, table)
+        else:
+            enhanced = img_array
+        
+        # Sharpening
+        kernel = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
+        sharp = cv2.filter2D(enhanced, -1, kernel)
+        
+        return sharp
+    except Exception as e:
+        return img_array
+
+def check_product_color(roi, expected_class):
+    """ตรวจสอบสีของสินค้าว่าตรงกับที่คาดหวังหรือไม่"""
+    if expected_class not in PRODUCT_COLORS or roi.size == 0:
+        return 0.5
     
-    kernel = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
-    sharp = cv2.filter2D(enhanced, -1, kernel)
-    
-    return sharp
+    try:
+        hsv = cv2.cvtColor(roi, cv2.COLOR_RGB2HSV)
+        lower, upper = PRODUCT_COLORS[expected_class]
+        mask = cv2.inRange(hsv, np.array(lower), np.array(upper))
+        color_ratio = np.sum(mask > 0) / (roi.shape[0] * roi.shape[1])
+        
+        return min(1.0, color_ratio / 0.3)  # Normalize
+    except:
+        return 0.5
 
 def detect_with_ensemble(img_array, conf_threshold=0.25):
+    """ตรวจจับด้วยหลายเทคนิคและรวมผล"""
     all_detections = []
     
+    # ทดสอบกับภาพต้นฉบับ
     results_orig = model(img_array, conf=conf_threshold)
-    img_enhanced = enhance_image(img_array)
-    results_enhanced = model(img_enhanced, conf=conf_threshold)
     
-    for results in [results_orig, results_enhanced]:
+    # ทดสอบกับภาพปรับแสง
+    enhanced_images = [enhance_image(img_array, 'clahe'), enhance_image(img_array, 'gamma')]
+    
+    for results in [results_orig]:
         if results[0].boxes is not None:
             for box in results[0].boxes:
                 cls_id = int(box.cls[0])
                 class_name = CLASS_NAMES[cls_id]
                 confidence = float(box.conf[0])
                 
-                # ไม่มี Empty_Stock แล้ว เก็บทุกการตรวจจับ
                 if confidence >= conf_threshold:
                     x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
                     all_detections.append([x1, y1, x2, y2, class_name, confidence])
     
+    # เพิ่มการตรวจจับจากภาพที่ปรับแต่ง
+    for i, enhanced in enumerate(enhanced_images):
+        try:
+            results_enh = model(enhanced, conf=conf_threshold)
+            if results_enh[0].boxes is not None:
+                for box in results_enh[0].boxes:
+                    cls_id = int(box.cls[0])
+                    class_name = CLASS_NAMES[cls_id]
+                    confidence = float(box.conf[0]) * 0.9  # ลดน้ำหนักเล็กน้อย
+                    
+                    if confidence >= conf_threshold:
+                        x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
+                        all_detections.append([x1, y1, x2, y2, class_name, confidence])
+        except:
+            continue
+    
+    # NMS
     if len(all_detections) > 1:
         all_detections.sort(key=lambda x: x[5], reverse=True)
         final_detections = []
@@ -189,7 +264,7 @@ def detect_with_ensemble(img_array, conf_threshold=0.25):
             duplicate = False
             for existing in final_detections:
                 iou = calculate_iou(det[:4], existing[:4])
-                if iou > 0.5 and det[4] == existing[4]:
+                if iou > 0.4 and det[4] == existing[4]:
                     duplicate = True
                     break
             if not duplicate:
@@ -209,9 +284,10 @@ def analyze_by_brightness(img_array, slot_abs_bbox):
     edge_density = np.sum(edges > 0) / (edges.shape[0] * edges.shape[1])
     brightness = np.mean(gray)
     
-    return (brightness < 140 and brightness > 30) or edge_density > 0.05
+    # ปรับปรุงเงื่อนไข
+    return (brightness < 180 and brightness > 40) or edge_density > 0.03
 
-def check_slot_occupancy_advanced(detection_boxes, slot_abs_bbox, iou_thresh=0.15):
+def check_slot_occupancy_advanced(detection_boxes, slot_abs_bbox, img_array, slot_name, iou_thresh=0.12):
     sx1, sy1, sx2, sy2 = slot_abs_bbox
     slot_area = (sx2 - sx1) * (sy2 - sy1)
     if slot_area <= 0:
@@ -219,6 +295,7 @@ def check_slot_occupancy_advanced(detection_boxes, slot_abs_bbox, iou_thresh=0.1
     
     best_iou = 0
     best_class = None
+    best_bbox = None
     
     for item in detection_boxes:
         if len(item) == 5:
@@ -241,11 +318,27 @@ def check_slot_occupancy_advanced(detection_boxes, slot_abs_bbox, iou_thresh=0.1
             slot_center_y = (sy1 + sy2) / 2
             center_distance = np.sqrt((center_x - slot_center_x)**2 + (center_y - slot_center_y)**2)
             center_score = 1 - min(1, center_distance / min(sx2-sx1, sy2-sy1))
-            final_score = (iou * 0.7) + (center_score * 0.3)
+            
+            # ปรับปรุงการคำนวณ final score
+            class_match_score = 1.0 if class_name == slot_name else 0.5
+            final_score = (iou * 0.5) + (center_score * 0.3) + (class_match_score * 0.2)
             
             if final_score > best_iou:
                 best_iou = final_score
                 best_class = class_name
+                best_bbox = [dx1, dy1, dx2, dy2]
+    
+    # ตรวจสอบสีเพิ่มเติม
+    if best_iou > iou_thresh and best_bbox and best_class:
+        try:
+            roi = img_array[max(0, best_bbox[1]):min(img_array.shape[0], best_bbox[3]),
+                            max(0, best_bbox[0]):min(img_array.shape[1], best_bbox[2])]
+            if roi.size > 0:
+                color_score = check_product_color(roi, best_class)
+                if color_score < 0.2:  # สีไม่ตรงเลย
+                    return False, None, best_iou
+        except:
+            pass
     
     return best_iou > iou_thresh, best_class, best_iou
 
@@ -264,21 +357,25 @@ def analyze_shelf_image_advanced(img_array, slot_boxes, conf_threshold=0.25):
     
     for slot in slot_boxes:
         abs_bbox = rel_to_abs(slot["rel_bbox"], w, h)
-        occupied, detected_class, confidence = check_slot_occupancy_advanced(detection_boxes, abs_bbox, iou_thresh=0.15)
+        occupied, detected_class, confidence = check_slot_occupancy_advanced(
+            detection_boxes, abs_bbox, img_array, slot["name"], iou_thresh=0.12
+        )
         
+        # ปรับปรุงการตรวจจับด้วย brightness analysis
         if not occupied:
             brightness_occupied = analyze_by_brightness(img_array, abs_bbox)
             if brightness_occupied:
                 occupied = True
                 detected_class = slot["name"]
-                confidence = 0.35
+                confidence = 0.4
         
         is_correct = False
         if occupied and detected_class:
             if detected_class == slot["name"]:
                 is_correct = True
             else:
-                if confidence > 0.5:
+                # ลด threshold สำหรับการยอมรับ
+                if confidence > 0.4:
                     is_correct = False
                 else:
                     occupied = False
@@ -296,7 +393,58 @@ def analyze_shelf_image_advanced(img_array, slot_boxes, conf_threshold=0.25):
         if not occupied:
             empty_slots.append(slot["name"])
     
+    # บันทึก log ความมั่นใจ
+    save_confidence_log(slot_statuses)
+    
     return slot_statuses, empty_slots, detection_boxes
+
+def save_confidence_log(slot_statuses):
+    """บันทึก log ความมั่นใจเพื่อวิเคราะห์"""
+    log = {
+        "timestamp": datetime.now().isoformat(),
+        "slots": slot_statuses
+    }
+    
+    history = []
+    if os.path.exists(CONFIDENCE_LOG_FILE):
+        try:
+            with open(CONFIDENCE_LOG_FILE, "r") as f:
+                history = json.load(f)
+        except:
+            pass
+    
+    history.insert(0, log)
+    history = history[:100]  # เก็บ 100 ล่าสุด
+    
+    try:
+        with open(CONFIDENCE_LOG_FILE, "w") as f:
+            json.dump(history, f, indent=2)
+    except:
+        pass
+
+
+def show_confidence_stats():
+    """แสดงสถิติความมั่นใจของโมเดล"""
+    if os.path.exists(CONFIDENCE_LOG_FILE):
+        try:
+            with open(CONFIDENCE_LOG_FILE, "r") as f:
+                logs = json.load(f)
+            
+            if logs:
+                confidences = []
+                for log in logs[:20]:
+                    for slot in log.get("slots", []):
+                        if slot.get("confidence", 0) > 0:
+                            confidences.append(slot["confidence"])
+                
+                if confidences:
+                    st.sidebar.markdown("---")
+                    st.sidebar.subheader("📊 สถิติความมั่นใจ")
+                    st.sidebar.metric("ค่าเฉลี่ย", f"{np.mean(confidences):.1%}")
+                    st.sidebar.metric("ค่าต่ำสุด", f"{np.min(confidences):.1%}")
+                    st.sidebar.metric("ค่าสูงสุด", f"{np.max(confidences):.1%}")
+        except:
+            pass
 
 # ==================== ฟังก์ชันวาดภาพ (รองรับภาษาไทย) ====================
 def get_thai_font(size=18):
@@ -1081,7 +1229,7 @@ with st.sidebar:
     st.subheader("🎨 ตัวเลือกการแสดงผล")
     show_grid_on_camera = st.checkbox("แสดงตาราง 11 ช่องบนภาพ", value=True)
     show_confidence = st.checkbox("แสดง Confidence Score", value=True)
-    
+    show_confidence_stats()
     st.markdown("---")
     
     # ปรับแต่งตำแหน่งช่อง
