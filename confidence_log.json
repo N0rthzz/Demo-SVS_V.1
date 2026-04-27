@@ -1,0 +1,48 @@
+[
+  {
+    "timestamp": "2026-04-27T19:22:34.711068",
+    "slots": [
+      {
+        "id": "S01",
+        "name": "Canned tea",
+        "status": true,
+        "detected": "Canned tea",
+        "is_correct": true,
+        "confidence": 0.4
+      },
+      {
+        "id": "S02",
+        "name": "Coconut Water Carton",
+        "status": true,
+        "detected": "Coconut Water Carton",
+        "is_correct": true,
+        "confidence": 0.4
+      },
+      {
+        "id": "S03",
+        "name": "Coffee Can",
+        "status": true,
+        "detected": "Coffee Can",
+        "is_correct": true,
+        "confidence": 0.4
+      },
+      {
+        "id": "S04",
+        "name": "Drinking water",
+        "status": true,
+        "detected": "Drinking water",
+        "is_correct": true,
+        "confidence": 0.4
+      },
+      {
+        "id": "S05",
+        "name": "Energy Drink",
+        "status": true,
+        "detected": "Energy Drink",
+        "is_correct": true,
+        "confidence": 0.4
+      },
+      {
+        "id": "S06",
+        "name": "Green Tea Bottle",
+        "status": 
