@@ -3,7 +3,7 @@ from ultralytics import YOLO
 import cv2
 
 # โหลดโมเดลที่เทรนแล้ว
-model = YOLO("runs/train/shelf_detection/weights/best.pt")  # เปลี่ยน path ตามจริง
+model = YOLO("best.pt")  # เปลี่ยน path ตามจริง
 
 # ตรวจจับจากภาพ
 image_path = "path_to_your_image.jpg"
