@@ -296,6 +296,7 @@ def check_slot_occupancy_advanced(detection_boxes, slot_abs_bbox, img_array, slo
     best_iou = 0
     best_class = None
     best_bbox = None
+    best_confidence = 0
     
     for item in detection_boxes:
         if len(item) == 5:
@@ -319,28 +320,35 @@ def check_slot_occupancy_advanced(detection_boxes, slot_abs_bbox, img_array, slo
             center_distance = np.sqrt((center_x - slot_center_x)**2 + (center_y - slot_center_y)**2)
             center_score = 1 - min(1, center_distance / min(sx2-sx1, sy2-sy1))
             
-            # ปรับปรุงการคำนวณ final score
-            class_match_score = 1.0 if class_name == slot_name else 0.5
-            final_score = (iou * 0.5) + (center_score * 0.3) + (class_match_score * 0.2)
+            # แก้ไข: ให้ class_match_score สูงเมื่อตรงกัน
+            # และไม่ลดคะแนนเมื่อไม่ตรง เพราะเดี๋ยวค่อย判断ทีหลัง
+            final_score = (iou * 0.6) + (center_score * 0.4)
             
             if final_score > best_iou:
                 best_iou = final_score
                 best_class = class_name
                 best_bbox = [dx1, dy1, dx2, dy2]
+                best_confidence = final_score
     
-    # ตรวจสอบสีเพิ่มเติม
-    if best_iou > iou_thresh and best_bbox and best_class:
+    # ตรวจสอบว่าตรงกับช่องหรือไม่
+    is_match = (best_class == slot_name) if best_class else False
+    
+    # ตรวจสอบสีเพิ่มเติม (ช่วยยืนยัน)
+    if best_iou > iou_thresh and best_bbox and best_class and not is_match:
         try:
             roi = img_array[max(0, best_bbox[1]):min(img_array.shape[0], best_bbox[3]),
                             max(0, best_bbox[0]):min(img_array.shape[1], best_bbox[2])]
             if roi.size > 0:
-                color_score = check_product_color(roi, best_class)
-                if color_score < 0.2:  # สีไม่ตรงเลย
-                    return False, None, best_iou
+                color_score = check_product_color(roi, slot_name)
+                if color_score > 0.3:  # ถ้าสีตรงกับช่องนี้
+                    best_class = slot_name
+                    is_match = True
         except:
             pass
     
-    return best_iou > iou_thresh, best_class, best_iou
+    # คืนค่า occupied = จริงเมื่อมี detection และ IOU สูงพอ
+    occupied = best_iou > iou_thresh
+    return occupied, best_class, best_iou
 
 def analyze_shelf_image_advanced(img_array, slot_boxes, conf_threshold=0.25):
     h, w = img_array.shape[:2]
@@ -369,17 +377,19 @@ def analyze_shelf_image_advanced(img_array, slot_boxes, conf_threshold=0.25):
                 detected_class = slot["name"]
                 confidence = 0.4
         
+        # แก้ไขส่วนนี้ - ปรับปรุงการ判断ความถูกต้อง
         is_correct = False
         if occupied and detected_class:
             if detected_class == slot["name"]:
-                is_correct = True
+                is_correct = True  # ถูกต้อง
             else:
-                # ลด threshold สำหรับการยอมรับ
-                if confidence > 0.4:
-                    is_correct = False
-                else:
+                # ถ้าตรวจพบสินค้าอื่น แสดงว่าผิดช่อง
+                is_correct = False
+                # แต่ถ้าความมั่นใจต่ำมาก อาจจะไม่มีสินค้า
+                if confidence < 0.3:
                     occupied = False
                     detected_class = None
+                    is_correct = False
         
         slot_statuses.append({
             "id": slot["id"],
