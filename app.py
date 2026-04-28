@@ -20,7 +20,7 @@ DEFAULT_SLOT_RELATIVE_BOXES = [
     {"id": "S06", "name": "Meiji Milk", "rel_bbox": [0.25, 0.31, 0.46, 0.57]},
     {"id": "S07", "name": "Oishi Rice", "rel_bbox": [0.48, 0.31, 0.69, 0.57]},
     {"id": "S08", "name": "Oishi Honey Lemon", "rel_bbox": [0.71, 0.31, 0.92, 0.57]},
-    {"id": "S09", "name": "Oishi Kyoho", "rel_bbox": [0.02, 0.55, 0.35, 0.90]},
+    {"id": "S09", "name": "Oishi Kyoho", "rel_bbox": [0.02, 0.60, 0.30, 0.86]},
     {"id": "S10", "name": "Pepsi Can", "rel_bbox": [0.35, 0.60, 0.63, 0.86]},
     {"id": "S11", "name": "Sprite Can", "rel_bbox": [0.68, 0.60, 0.96, 0.86]},
 ]
@@ -36,8 +36,6 @@ CLASS_TO_SLOT = {
     "Oishi Rice": "S07",
     "Oishi Honey Lemon": "S08",
     "Oishi Kyoho": "S09",
-    "oichi kyoho": "S09",    # เพิ่มบรรทัดนี้
-    "oishi kyoho": "S09",    # เผื่อไว้
     "Pepsi": "S10",
     "Sprite": "S11",
 }
