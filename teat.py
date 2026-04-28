@@ -9,9 +9,14 @@ import os
 import cv2
 from streamlit_webrtc import webrtc_streamer, VideoTransformerBase, WebRtcMode
 import av
+import time
 
 # ------------------- โหลดโมเดล YOLO -------------------
-model = YOLO("best.pt")
+@st.cache_resource
+def load_model():
+    return YOLO("best.pt")
+
+model = load_model()
 
 # ------------------- กำหนด Shelf Slot เริ่มต้น -------------------
 DEFAULT_SLOT_RELATIVE_BOXES = [
@@ -43,9 +48,9 @@ CLASS_TO_SLOT = {
 }
 
 CATEGORY_GROUPS = {
-    "Group 1 (Can Sodas 1)": ["S01", "S02", "S03","S04"],
-    "Group 2 (Can Sodas 2)": ["S05", "S06", "S07","S08"],
-    "Group 3 (Juice & Milk & Oishi Teas)": ["S09", "S10", "S11"],
+    "🥤 Group 1 ": ["S01", "S02", "S03","S04"],
+    "🧃 Group 2 ": ["S05", "S06", "S07","S08"],
+    "🥛 Group 3 ": ["S09", "S10", "S11"],
 }
 
 SLOT_CONFIG_FILE = "slot_config.json"
@@ -76,21 +81,20 @@ def init_session_state():
     if "slot_edit_selected_id" not in st.session_state:
         st.session_state.slot_edit_selected_id = "S01"
     if "live_inventory" not in st.session_state:
-        st.session_state.live_inventory = {}   # จะอัปเดตใน VideoTransformer
+        st.session_state.live_inventory = {}
+    if "system_status" not in st.session_state:
+        st.session_state.system_status = {
+            "fps": 0,
+            "detection_count": 0,
+            "last_update": time.time(),
+            "is_running": False
+        }
 
 init_session_state()
 
-# ------------------- ฟังก์ชันสำหรับวาดกรอบ (รองรับทั้ง PIL และ numpy) -------------------
+# ------------------- ฟังก์ชันสำหรับวาดกรอบ -------------------
 def draw_shelf_slots(image, detections, slots, highlight_slot_id=None):
-    """
-    image: PIL Image หรือ numpy array (BGR หรือ RGB)
-    detections: list ของ dict (มี slot_id)
-    slots: list ของ dict
-    highlight_slot_id: slot id ที่จะไฮไลต์
-    """
-    # แปลง numpy เป็น PIL ถ้าจำเป็น
     if isinstance(image, np.ndarray):
-        # ถ้าเป็น BGR (จาก OpenCV) ให้เปลี่ยนเป็น RGB
         if len(image.shape) == 3 and image.shape[2] == 3:
             image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         image = Image.fromarray(image)
@@ -130,7 +134,6 @@ def draw_shelf_slots(image, detections, slots, highlight_slot_id=None):
     return img_with_slots
 
 def match_detections_to_slots(detections, slots, image_width, image_height):
-    """เหมือนเดิม แต่รับ width/height แยก"""
     matched = []
     for det in detections:
         class_name = det.get("class_name", "")
@@ -174,29 +177,107 @@ def analyze_shelf_inventory(detections, slots):
                 categorized[category][slot_id] = inventory[slot_id]
     return inventory, categorized
 
+def display_system_status(inventory):
+    """แสดงสถานะระบบแบบสรุปในกล่องเดียว"""
+    total_slots = len(inventory)
+    filled_slots = sum(1 for v in inventory.values() if v["detected"])
+    empty_slots = total_slots - filled_slots
+    stock_percentage = (filled_slots / total_slots) * 100 if total_slots > 0 else 0
+    
+    # กำหนดสถานะ overall
+    if stock_percentage == 100:
+        status = "🟢 EXCELLENT"
+        status_color = "green"
+        message = "สินค้าครบทุกช่อง!"
+    elif stock_percentage >= 70:
+        status = "🟡 GOOD"
+        status_color = "orange"
+        message = f"สินค้าครบ {filled_slots}/{total_slots} ช่อง"
+    elif stock_percentage >= 40:
+        status = "🟠 NEEDS ATTENTION"
+        status_color = "orange"
+        message = f"สินค้าหมด {empty_slots} ช่อง ควรเติมสินค้า"
+    else:
+        status = "🔴 CRITICAL"
+        status_color = "red"
+        message = f"⚠️ สินค้าหมดจำนวนมาก ({empty_slots}/{total_slots} ช่อง) ต้องเติมทันที!"
+    
+    # สรุปสถานะในกล่องเดียว
+    with st.container():
+        st.markdown(f"""
+        <div style="
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            border-radius: 15px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        ">
+            <h3 style="color: white; margin: 0 0 10px 0;">📊 ระบบสถานะรวม</h3>
+            <div style="display: flex; justify-content: space-around; flex-wrap: wrap;">
+                <div style="text-align: center; color: white;">
+                    <div style="font-size: 28px; font-weight: bold;">{total_slots}</div>
+                    <div>📍 ช่องทั้งหมด</div>
+                </div>
+                <div style="text-align: center; color: #4ade80;">
+                    <div style="font-size: 28px; font-weight: bold;">{filled_slots}</div>
+                    <div>✅ มีสินค้า</div>
+                </div>
+                <div style="text-align: center; color: #fca5a5;">
+                    <div style="font-size: 28px; font-weight: bold;">{empty_slots}</div>
+                    <div>⚠️ ว่าง</div>
+                </div>
+                <div style="text-align: center; color: white;">
+                    <div style="font-size: 28px; font-weight: bold;">{stock_percentage:.0f}%</div>
+                    <div>📈 สต็อก</div>
+                </div>
+            </div>
+            <div style="
+                margin-top: 15px;
+                padding: 10px;
+                background: rgba(255, 255, 255, 0.2);
+                border-radius: 10px;
+                text-align: center;
+            ">
+                <span style="color: white; font-weight: bold;">สถานะ: </span>
+                <span style="color: {status_color}; font-weight: bold; font-size: 18px;">{status}</span>
+                <span style="color: white; margin-left: 10px;">- {message}</span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    return stock_percentage, empty_slots
+
 def display_inventory_ui(inventory, categorized):
     total_slots = len(inventory)
     filled_slots = sum(1 for v in inventory.values() if v["detected"])
     empty_slots = total_slots - filled_slots
 
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Total Slots", total_slots)
-    with col2:
-        st.metric("✅ Stocked", filled_slots)
-    with col3:
-        st.metric("⚠️ Empty", empty_slots, delta=-empty_slots if empty_slots > 0 else None, delta_color="inverse")
+    # แสดง 11 ช่องเป็นตาราง
+    st.markdown("### 🗂️ รายละเอียดสินค้า 11 ช่อง")
+    
+    # สร้างตารางแบบ Grid 3x4 (11 ช่อง)
+    slot_list = list(inventory.items())
+    cols = st.columns(4)
+    for idx, (slot_id, info) in enumerate(slot_list):
+        col_idx = idx % 4
+        with cols[col_idx]:
+            if info["detected"]:
+                st.success(f"✅ **{slot_id}**\n{info['name']}\nConf: {info['confidence']:.1%}")
+            else:
+                st.error(f"❌ **{slot_id}**\n{info['name']}\n⚠️ OUT OF STOCK")
+    
     st.markdown("---")
-
+    
+    # แสดงแยกตามกลุ่ม
     for category, slots in categorized.items():
-        st.subheader(f"📦 {category}")
-        cols = st.columns(len(slots))
+        st.subheader(category)
+        cols = st.columns(min(len(slots), 4))
         for idx, (slot_id, info) in enumerate(slots.items()):
-            with cols[idx]:
+            with cols[idx % len(cols)]:
                 if info["detected"]:
-                    st.success(f"✅ **{slot_id}**\n{info['name']}\nConf: {info['confidence']:.1%}")
+                    st.success(f"✅ **{slot_id}**\n{info['name']}")
                 else:
-                    st.error(f"❌ **{slot_id}**\n{info['name']}\n⚠️ OUT OF STOCK")
+                    st.error(f"❌ **{slot_id}**\n{info['name']}")
 
     empty_slot_list = [f"{slot_id} ({info['name']})" for slot_id, info in inventory.items() if not info["detected"]]
     if empty_slot_list:
@@ -208,32 +289,81 @@ def display_inventory_ui(inventory, categorized):
     else:
         st.success("🎉 **Perfect! All slots are fully stocked!** 🎉")
 
-def evaluate_model_accuracy(results):
-    if results and len(results[0].boxes) > 0:
-        confidences = [float(box.conf.item()) for box in results[0].boxes]
-        avg_confidence = np.mean(confidences) if confidences else 0
-        num_detections = len(confidences)
+# ------------------- VideoTransformer สำหรับ Webcam (Real-time) -------------------
+class InventoryVideoTransformer(VideoTransformerBase):
+    def __init__(self, model, slots_getter):
+        self.model = model
+        self.slots_getter = slots_getter
+        self.frame_count = 0
+        self.inference_every_n = 5  # ประมวลผล YOLO ทุก 5 เฟรม (ลดภาระ CPU มากๆ)
+        self.last_detections = []
+        self.last_inference_time = time.time()
+        self.fps = 0
 
-        st.subheader("📊 Model Accuracy Report")
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Total Detections", num_detections)
-        with col2:
-            st.metric("Avg Confidence", f"{avg_confidence:.2%}")
-        with col3:
-            high_conf = sum(1 for c in confidences if c > 0.7)
-            st.metric("High Confidence (>70%)", f"{high_conf}/{num_detections}" if num_detections > 0 else "0")
-        if confidences:
-            st.write("**Confidence Distribution:**")
-            conf_array = np.array(confidences)
-            bins = [0, 0.5, 0.7, 0.9, 1.0]
-            hist, _ = np.histogram(conf_array, bins=bins)
-            hist_data = pd.DataFrame({"Range": ["0-50%", "50-70%", "70-90%", "90-100%"], "Count": hist})
-            st.bar_chart(hist_data.set_index("Range"))
-    else:
-        st.info("No detections to evaluate model accuracy")
+    def transform(self, frame: av.VideoFrame) -> av.VideoFrame:
+        img = frame.to_ndarray(format="rgb24")
+        h, w, _ = img.shape
+        
+        current_slots = self.slots_getter()
+        
+        # คำนวณ FPS
+        current_time = time.time()
+        time_diff = current_time - self.last_inference_time
+        if time_diff > 0:
+            self.fps = 1 / time_diff
+        self.last_inference_time = current_time
+        
+        # ทำ inference เฉพาะบางเฟรม
+        if self.frame_count % self.inference_every_n == 0:
+            try:
+                results = self.model(img, verbose=False)  # ปิด verbose ลด overhead
+                raw_detections = []
+                if len(results[0].boxes) > 0:
+                    class_names = results[0].names
+                    for box in results[0].boxes:
+                        class_id = int(box.cls.item())
+                        confidence = float(box.conf.item())
+                        bbox = box.xyxy[0].tolist()
+                        class_name = class_names.get(class_id, "unknown")
+                        raw_detections.append({
+                            "class_name": class_name,
+                            "confidence": confidence,
+                            "bbox": bbox
+                        })
+                
+                matched = match_detections_to_slots(raw_detections, current_slots, w, h)
+                self.last_detections = matched
+                
+                # อัปเดต inventory
+                inv, _ = analyze_shelf_inventory(matched, current_slots)
+                st.session_state.live_inventory = inv
+                
+                # อัปเดตสถานะระบบ
+                st.session_state.system_status.update({
+                    "fps": self.fps,
+                    "detection_count": len(matched),
+                    "last_update": current_time,
+                    "is_running": True
+                })
+            except Exception as e:
+                print(f"Inference error: {e}")
+        
+        # วาดภาพ
+        annotated_pil = draw_shelf_slots(img, self.last_detections, current_slots, highlight_slot_id=None)
+        for det in self.last_detections:
+            bbox = det["bbox"]
+            x1, y1, x2, y2 = map(int, bbox)
+            draw = ImageDraw.Draw(annotated_pil, "RGBA")
+            draw.rectangle([x1, y1, x2, y2], outline="#00FF00", width=2)
+            draw.text((x1, y1-10), f"{det['class_name']} {det['confidence']:.2f}", fill="#00FF00")
+        
+        annotated_np = np.array(annotated_pil)
+        annotated_np = cv2.cvtColor(annotated_np, cv2.COLOR_RGB2BGR)
+        
+        self.frame_count += 1
+        return av.VideoFrame.from_ndarray(annotated_np, format="bgr24")
 
-# ------------------- UI สำหรับปรับตำแหน่ง Shelf Slots (Sidebar) -------------------
+# ------------------- UI สำหรับปรับตำแหน่ง Shelf Slots -------------------
 def slot_adjustment_sidebar(image_for_preview=None):
     with st.sidebar.expander("🎛️ Adjust Shelf Slots Positions", expanded=False):
         st.markdown("ปรับตำแหน่งกรอบ Shelf ให้ตรงกับสินค้าในภาพ")
@@ -294,63 +424,6 @@ def slot_adjustment_sidebar(image_for_preview=None):
             preview_img = draw_shelf_slots(image_for_preview, dummy_detections, st.session_state.slots, highlight_slot_id=selected_id)
             st.image(preview_img, caption=f"Highlight: {selected_id}", use_column_width=True)
 
-# ------------------- VideoTransformer สำหรับ Webcam (Real-time) -------------------
-class InventoryVideoTransformer(VideoTransformerBase):
-    def __init__(self, model, slots_getter):
-        self.model = model
-        self.slots_getter = slots_getter  # function ที่คืนค่า slots ปัจจุบัน
-        self.frame_count = 0
-        self.inference_every_n = 2   # ประมวลผล YOLO ทุก 2 เฟรม (ลดภาระ CPU)
-
-    def transform(self, frame: av.VideoFrame) -> av.VideoFrame:
-        # แปลง frame เป็น numpy array (RGB)
-        img = frame.to_ndarray(format="rgb24")
-        h, w, _ = img.shape
-
-        # เรียกใช้ slots ปัจจุบันจาก session state
-        current_slots = self.slots_getter()
-
-        # ทำ inference เฉพาะบางเฟรม
-        if self.frame_count % self.inference_every_n == 0:
-            results = self.model(img)  # YOLO inference
-            raw_detections = []
-            if len(results[0].boxes) > 0:
-                class_names = results[0].names
-                for box in results[0].boxes:
-                    class_id = int(box.cls.item())
-                    confidence = float(box.conf.item())
-                    bbox = box.xyxy[0].tolist()
-                    class_name = class_names.get(class_id, "unknown")
-                    raw_detections.append({
-                        "class_name": class_name,
-                        "confidence": confidence,
-                        "bbox": bbox
-                    })
-            # จับคู่กับ slots
-            matched = match_detections_to_slots(raw_detections, current_slots, w, h)
-            # อัปเดต inventory ใน session state
-            inv, _ = analyze_shelf_inventory(matched, current_slots)
-            st.session_state.live_inventory = inv
-            # เก็บ detections ไว้ใช้ในการวาด
-            self.last_detections = matched
-        else:
-            matched = getattr(self, "last_detections", [])
-
-        # วาดกรอบ shelf + detection
-        annotated_pil = draw_shelf_slots(img, matched, current_slots, highlight_slot_id=None)
-        # วาด bounding boxes ของ YOLO เพิ่ม (optional)
-        for det in matched:
-            bbox = det["bbox"]
-            x1, y1, x2, y2 = map(int, bbox)
-            draw = ImageDraw.Draw(annotated_pil, "RGBA")
-            draw.rectangle([x1, y1, x2, y2], outline="#00FF00", width=2)
-            draw.text((x1, y1-10), f"{det['class_name']} {det['confidence']:.2f}", fill="#00FF00")
-        annotated_np = np.array(annotated_pil)
-        annotated_np = cv2.cvtColor(annotated_np, cv2.COLOR_RGB2BGR)
-
-        self.frame_count += 1
-        return av.VideoFrame.from_ndarray(annotated_np, format="bgr24")
-
 # ------------------- Main App -------------------
 st.set_page_config(page_title="Stock Vision App - with Live Webcam", layout="wide")
 st.title("📦 Stock Vision App")
@@ -361,15 +434,16 @@ app_mode = st.sidebar.radio(
     ["🔍 Detection & Inventory", "📊 Model Accuracy Check", "🎥 Real-time Webcam Check"]
 )
 
-# ถ้าเป็น Real-time Webcam Check ให้แสดงกล้องโดยไม่ต้องรออัปโหลดรูป
 if app_mode == "🎥 Real-time Webcam Check":
-    # แสดง Sidebar สำหรับปรับ slots (ใช้ภาพตัวอย่าง static ตัวแรกที่ capture ได้? ไม่มีภาพตัวอย่าง งด preview)
-    slot_adjustment_sidebar(image_for_preview=None)  # อาจไม่มี preview
-
+    slot_adjustment_sidebar(image_for_preview=None)
+    
     st.subheader("🎥 Live Webcam Feed (Real-time Detection with Shelf Slots)")
     st.markdown("กล้องจะแสดงภาพพร้อมกรอบ Shelf (แดง=ว่าง, เขียว=มีสินค้า) และ bounding boxes ของสินค้า")
-
-    # ฟังก์ชันดึง slots ล่าสุดจาก session state (ใช้ใน transformer)
+    
+    # แสดงสถานะระบบก่อนเปิดกล้อง
+    if st.session_state.live_inventory:
+        stock_percentage, empty_slots = display_system_status(st.session_state.live_inventory)
+    
     def get_current_slots():
         return st.session_state.slots
 
@@ -378,14 +452,27 @@ if app_mode == "🎥 Real-time Webcam Check":
         mode=WebRtcMode.SENDRECV,
         video_transformer_factory=lambda: InventoryVideoTransformer(model, get_current_slots),
         async_processing=True,
-        media_stream_constraints={"video": {"width": {"ideal": 640}, "height": {"ideal": 480}}}
+        media_stream_constraints={"video": {"width": {"ideal": 640}, "height": {"ideal": 480}, "frameRate": {"ideal": 15}}}
     )
-
+    
     st.markdown("---")
     st.subheader("📋 Inventory Status (Live)")
-    # แสดง inventory ล่าสุดที่อัปเดตจาก VideoTransformer ทุกเฟรม
+    
     if st.session_state.live_inventory:
-        # สร้าง categorized จาก live_inventory
+        # แสดงสถานะระบบสรุป
+        stock_percentage, empty_slots = display_system_status(st.session_state.live_inventory)
+        
+        # แสดง FPS และสถานะการทำงาน
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("📊 FPS", f"{st.session_state.system_status['fps']:.1f}")
+        with col2:
+            st.metric("🔍 Detections", st.session_state.system_status['detection_count'])
+        with col3:
+            status_text = "🟢 Running" if st.session_state.system_status['is_running'] else "🔴 Stopped"
+            st.metric("⚡ Status", status_text)
+        
+        # แสดงรายละเอียด 11 ช่อง
         live_categorized = {}
         for category, slot_ids in CATEGORY_GROUPS.items():
             live_categorized[category] = {}
@@ -394,7 +481,7 @@ if app_mode == "🎥 Real-time Webcam Check":
                     live_categorized[category][sid] = st.session_state.live_inventory[sid]
         display_inventory_ui(st.session_state.live_inventory, live_categorized)
     else:
-        st.info("รอข้อมูลจากกล้อง... (กรุณากด Start บน video stream)")
+        st.info("รอข้อมูลจากกล้อง... (กรุณากด Start บน video stream และรอสักครู่)")
 
 elif app_mode in ["🔍 Detection & Inventory", "📊 Model Accuracy Check"]:
     uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
@@ -425,6 +512,10 @@ elif app_mode in ["🔍 Detection & Inventory", "📊 Model Accuracy Check"]:
             current_slots = st.session_state.slots
             matched_detections = match_detections_to_slots(detections, current_slots, image.width, image.height)
             inventory, categorized = analyze_shelf_inventory(matched_detections, current_slots)
+            
+            # แสดงสถานะระบบสรุป
+            display_system_status(inventory)
+            
             highlight_id = st.session_state.get("slot_edit_selected_id", None)
             img_with_slots = draw_shelf_slots(image, matched_detections, current_slots, highlight_slot_id=highlight_id)
 
@@ -451,20 +542,6 @@ elif app_mode in ["🔍 Detection & Inventory", "📊 Model Accuracy Check"]:
 
         elif app_mode == "📊 Model Accuracy Check":
             evaluate_model_accuracy(results)
-            if len(result.boxes) > 0:
-                st.subheader("🔍 Detected Items")
-                for box in result.boxes:
-                    class_id = int(box.cls.item())
-                    confidence = float(box.conf.item())
-                    label = result.names.get(class_id, f"Class {class_id}")
-                    st.write(f"- {label}  `{confidence:.2%}`")
-                plotted = result.plot()
-                plotted_rgb = plotted[..., ::-1]
-                st.image(plotted_rgb, caption="Detection Result", use_column_width=True)
-            else:
-                st.info("No objects detected in the image.")
-    else:
-        st.info("👈 Please upload an image to begin")
 
-st.markdown("---")
+st.markdown("---") 
 st.caption("Stock Vision App - Real-time + Image Mode | Adjust slots in sidebar")
